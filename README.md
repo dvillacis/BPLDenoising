@@ -1,4 +1,4 @@
-# BilevelExperiments
+# BPLDenoising
 
 Set of experiments reported in the paper "Optimality Conditions and a Trust Region Algorithm for Bilevel Parameter Learning in Total Variation Image Denoising".
 
