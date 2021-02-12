@@ -1,4 +1,4 @@
-module BilevelExperiments
+module BPLDenoising
 
 export generate_scalar_tv_cost, generate_cost_plot
 export scalar_bilevel_tv_learn, patch_bilevel_tv_learn
@@ -23,9 +23,9 @@ using VariationalImaging
 using VariationalImaging.TestDatasets
 using VariationalImaging.GradientOps
 using VariationalImaging.OpDenoise
-using VariationalImaging.Bilevel
 
-#include("TVLearningFunction.jl")
+include("Bilevel.jl")
+
 include("TVLearningFunctionOp.jl")
 include("SumRegsLearningFunction.jl")
 
@@ -159,8 +159,6 @@ function save_results(params, b, b_data, x::AbstractArray, opt_img, st)
         FileIO.save(File(format"PNG", fn_par("par", "png")), grayimg(x̄))
     end
 end
-
-
 
 
 ###########################
