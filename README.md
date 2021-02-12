@@ -29,7 +29,9 @@ $ julia --project=BPLDenoising
 Once in the julia REPL just import the module and the experiment functions
 
 ```julia
-julia> using BilevelExperiments.ScalarParameterLearning
-julia> run_bilevel_learn("dataset_name")
+julia> using BPLDenoising
+julia> scalar_bilevel_tv_learn("dataset_name")
 ```
+
+For the "dataset_name" variable you can choose one from the [TestDatasets](https://github.com/dvillacis/TestDatasets) package.
 
