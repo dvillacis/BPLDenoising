@@ -23,7 +23,7 @@ To reproduce the experiments it is necessary to clone the code repository and in
 
 ```sh
 $ git clone https://github.com/dvillacis/BPLDenoising.git
-$ julia --project=BilevelExperiments
+$ julia --project=BPLDenoising
 ```
 
 Once in the julia REPL just import the module and the experiment functions

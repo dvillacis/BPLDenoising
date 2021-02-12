@@ -13,6 +13,7 @@ using ColorTypes: Gray
 import ColorVectorSpace
 using ImageContrastAdjustment
 using ImageQualityIndexes
+using TestDatasets
 
 using AlgTools.Util
 using AlgTools.LinOps
@@ -20,12 +21,10 @@ using AlgTools.LinkedLists
 using ImageTools.Visualise
 
 using VariationalImaging
-using VariationalImaging.TestDatasets
 using VariationalImaging.GradientOps
 using VariationalImaging.OpDenoise
 
 include("Bilevel.jl")
-
 include("TVLearningFunctionOp.jl")
 include("SumRegsLearningFunction.jl")
 

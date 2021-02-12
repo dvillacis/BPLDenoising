@@ -2,10 +2,6 @@
 # Bilevel Parameter Learning via Nonsmooth Trust Region 
 ########################################################
 
-__precompile__()
-
-module Bilevel
-
 using SparseArrays
 
 using AlgTools
@@ -150,5 +146,3 @@ function bilevel_learn(ds :: Dataset,
 
     return x, u, v
 end
-
-end # Module
