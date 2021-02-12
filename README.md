@@ -33,5 +33,3 @@ julia> using BilevelExperiments.ScalarParameterLearning
 julia> run_bilevel_learn("dataset_name")
 ```
 
-## Datasets
-
