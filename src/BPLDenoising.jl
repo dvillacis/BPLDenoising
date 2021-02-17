@@ -176,9 +176,9 @@ const bilevel_params = (
     η₁ = 0.25,
     η₂ = 0.75,
     β₁ = 0.25,
-    β₂ = 1.5,
-    Δ₀ = 1.0,
-    α₀ = 2.0
+    β₂ = 1.9,
+    Δ₀ = 0.1,
+    α₀ = 0.1
 )
 
 function scalar_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefix, kwargs...)
@@ -208,7 +208,7 @@ const patch_bilevel_params = (
     η₁ = 0.25,
     η₂ = 0.75,
     β₁ = 0.25,
-    β₂ = 1.5,
+    β₂ = 1.9,
     Δ₀ = 1.0,
     α₀ = 0.001*ones(2,2)
 )
@@ -281,7 +281,7 @@ const patch_sumregs_bilevel_params = (
 function patch_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_prefix, kwargs...)
     # Parameters for this experiment
     params = default_params ⬿ patch_sumregs_bilevel_params ⬿ kwargs
-    params = params ⬿ (save_prefix = "sumregs_optimal_parameter_scalar_" * params.dataset_name,)
+    params = params ⬿ (save_prefix = "sumregs_optimal_parameter_patch_$(size(params.α₀))" * params.dataset_name,)
     # Load dataset
     b,b_noisy = TestDatasets.testdataset(params.dataset_name)
     b = Float64.(Gray{Float64}.(b))

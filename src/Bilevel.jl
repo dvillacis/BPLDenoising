@@ -36,8 +36,8 @@ function init_rest(x,learning_function::Function,Δ,ds)
     ū = copy(u)
     fx̄ = copy(fx)
     gx̄ = copy(gx)
-    #B = ZeroOp{typeof(x)}()
-    B = IdOp{typeof(x)}()
+    B = ZeroOp{typeof(x)}()
+    #B = IdOp{typeof(x)}()
     return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
 end
 
@@ -110,7 +110,8 @@ function bilevel_learn(ds :: Dataset,
 
     v = iterate(params) do verbose :: Function
         
-        println("x=$(norm(x,1)/length(x)), Δ=$Δ, gx=$(norm(gx,1)/length(x))")
+        println("x=$(norm(x,1)/length(x)), Δ=$Δ, gx=$(norm₂(gx))")
+        #println("x=$(norm(x,1)/length(x)), Δ=$Δ, gx=$gx")
 
         p = cauchy_point_box(x,Δ,gx,B) # solve tr subproblem
 
