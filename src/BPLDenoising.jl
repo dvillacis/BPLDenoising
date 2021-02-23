@@ -24,9 +24,12 @@ using VariationalImaging
 using VariationalImaging.GradientOps
 using VariationalImaging.OpDenoise
 
+include("BilevelVisualise.jl")
 include("Bilevel.jl")
 include("TVLearningFunctionOp.jl")
 include("SumRegsLearningFunction.jl")
+
+using BPLDenoising.BilevelVisualise
 
 
 const default_save_prefix = "output"
@@ -124,7 +127,7 @@ function save_results(params, b, b_data, x::Union{Real,AbstractVector{Float64}},
 end
 
 
-function save_results(params, b, b_data, x::AbstractArray, opt_img, st)
+function save_results(params, b, b_data, x::AbstractArray{T,2}, opt_img, st) where T
     if params.save_results
         out_path = joinpath(default_save_prefix,params.dataset_name)
         if isdir(out_path) == false
@@ -159,6 +162,42 @@ function save_results(params, b, b_data, x::AbstractArray, opt_img, st)
     end
 end
 
+function save_results(params, b, b_data, x::AbstractArray{T,3}, opt_img, st) where T
+    if params.save_results
+        out_path = joinpath(default_save_prefix,params.dataset_name)
+        if isdir(out_path) == false
+            mkpath(out_path)
+        end
+        perffile = joinpath(out_path,params.save_prefix * ".txt")
+        qualityfile = joinpath(out_path,params.save_prefix * "_quality.txt")
+        println("Saving " * perffile)
+        write_log(perffile, st.log, "# params = $(params), x = $x\n")
+        open(qualityfile,"w") do io
+            write(io,"img_num \t orig_ssim \t orig_psnr \t out_ssim \t out_psnr\n")
+            M,N,O = size(b)
+            for i = 1:O
+                noisy_ssim = assess_ssim(b[:,:,i],b_data[:,:,i])
+                noisy_psnr = assess_psnr(b[:,:,i],b_data[:,:,i])
+                out_ssim = assess_ssim(b[:,:,i],opt_img[:,:,i])
+                out_psnr = assess_psnr(b[:,:,i],opt_img[:,:,i])
+                write(io,"$i\t $noisy_ssim \t $noisy_psnr \t $out_ssim \t $out_psnr\n")
+
+                fn = (t, ext, i) -> "$(joinpath(out_path,params.save_prefix))_$(t)_$(i).$(ext)"
+                FileIO.save(File(format"PNG", fn("true", "png", i)), grayimg(b[:,:,i]))
+                FileIO.save(File(format"PNG", fn("data", "png", i)), grayimg(b_data[:,:,i]))
+                FileIO.save(File(format"PNG", fn("reco", "png", i)), grayimg(opt_img[:,:,i]))
+            end
+        end
+        p = PatchOp(x,b[:,:,1]) # Adjust parameter size
+        x̄ = p(x)
+        fn_par = (t, ext, i) -> "$(joinpath(out_path,params.save_prefix))_$(t)_$(i).$(ext)"
+        adjust_histogram!(x̄,LinearStretching())
+        FileIO.save(File(format"PNG", fn_par("par", "png", 1)), grayimg(x̄[:,:,1]))
+        FileIO.save(File(format"PNG", fn_par("par", "png", 2)), grayimg(x̄[:,:,2]))
+        FileIO.save(File(format"PNG", fn_par("par", "png", 3)), grayimg(x̄[:,:,3]))
+    end
+end
+
 
 ###########################
 # Scalar Bilevel Experiment
@@ -169,7 +208,8 @@ const default_params = (
     maxiter = 20,
     save_results = true,
     dataset_name = "cameraman128_5",
-    save_iterations = false
+    save_iterations = false,
+    tol = 1e-5
 )
 
 const bilevel_params = (
@@ -190,7 +230,7 @@ function scalar_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefi
     b = Float64.(Gray{Float64}.(b))
     b_noisy = Float64.(Gray{Float64}.(b_noisy))
     # Launch (background) visualiser
-    st, iterate = initialise_visualisation(visualise)
+    st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm
     x, u, st = bilevel_learn((b,b_noisy),tv_op_learning_function; xinit=params.α₀,iterate=iterate, params=params)
     adjust_histogram!(u,LinearStretching())
@@ -209,8 +249,8 @@ const patch_bilevel_params = (
     η₂ = 0.75,
     β₁ = 0.25,
     β₂ = 1.9,
-    Δ₀ = 1.0,
-    α₀ = 0.001*ones(2,2)
+    Δ₀ = 0.0001,
+    α₀ = 0.0001*ones(2,2)
 )
 
 function patch_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefix, kwargs...)
@@ -222,7 +262,7 @@ function patch_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefix
     b = Float64.(Gray{Float64}.(b))
     b_noisy = Float64.(Gray{Float64}.(b_noisy))
     # Launch (background) visualiser
-    st, iterate = initialise_visualisation(visualise)
+    st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm
     x, u, st = bilevel_learn((b,b_noisy),tv_op_learning_function; xinit=params.α₀,iterate=iterate, params=params)
     adjust_histogram!(u,LinearStretching())
@@ -242,8 +282,10 @@ const sumregs_bilevel_params = (
     η₂ = 0.75,
     β₁ = 0.25,
     β₂ = 1.5,
-    Δ₀ = 1.0,
-    α₀ = [0.01;0.01;0.01]
+    Δ₀ = 0.01,
+    α₀₁ = 0.0001,
+    α₀₂ = 0.0001,
+    α₀₃ = 0.0001
 )
 
 function scalar_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_prefix, kwargs...)
@@ -255,9 +297,9 @@ function scalar_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_
     b = Float64.(Gray{Float64}.(b))
     b_noisy = Float64.(Gray{Float64}.(b_noisy))
     # Launch (background) visualiser
-    st, iterate = initialise_visualisation(visualise)
+    st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm
-    x, u, st = bilevel_learn((b,b_noisy),sumregs_learning_function; xinit=params.α₀,iterate=iterate, params=params)
+    x, u, st = bilevel_learn((b,b_noisy),sumregs_learning_function; xinit=[params.α₀₁;params.α₀₂;params.α₀₃],iterate=iterate, params=params)
     adjust_histogram!(u,LinearStretching())
     # Save results
     save_results(params, b, b_noisy, x, u, st)
@@ -274,8 +316,8 @@ const patch_sumregs_bilevel_params = (
     η₂ = 0.75,
     β₁ = 0.25,
     β₂ = 1.5,
-    Δ₀ = 1.0,
-    α₀ = [0.1*ones(2,2);0.1*ones(2,2);0.1*ones(2,2)]
+    Δ₀ = 0.0001,
+    α₀ = 0.0001*ones(2,2,3)
 )
 
 function patch_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_prefix, kwargs...)
@@ -287,7 +329,7 @@ function patch_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_p
     b = Float64.(Gray{Float64}.(b))
     b_noisy = Float64.(Gray{Float64}.(b_noisy))
     # Launch (background) visualiser
-    st, iterate = initialise_visualisation(visualise)
+    st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm
     x, u, st = bilevel_learn((b,b_noisy),sumregs_learning_function; xinit=params.α₀,iterate=iterate, params=params)
     adjust_histogram!(u,LinearStretching())

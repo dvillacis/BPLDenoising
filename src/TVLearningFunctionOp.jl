@@ -103,7 +103,7 @@ function denoise(data,x::AbstractArray,op::LinOp)
     return opt_img
 end
 
-function gradient(α,op::LinOp,u::AbstractArray{T,3},ū::AbstractArray{T,3}) where T
+function gradient(α::Real,op::LinOp,u::AbstractArray{T,3},ū::AbstractArray{T,3}) where T
 	
 	M,N,O = size(u)
 	grad = 0
@@ -176,13 +176,28 @@ function gradient_reg(α::Real,op::LinOp,u::AbstractArray{T,2}, ū::AbstractArr
 
 end
 
-function gradient_reg(α::AbstractArray,op::LinOp,u::AbstractArray{T,2}, ū::AbstractArray{T,2}) where T
+function gradient(α::AbstractArray, op::LinOp, u::AbstractArray{T,3}, ū::AbstractArray{T,3}) where T
+	
+	M,N,O = size(u)
+	m,n = size(α)
+	p = PatchOp(α,u[:,:,1]) # Adjust parameter size
+	grad = zeros(size(α))
+	for i = 1:O
+		u1 = @view u[:,:,i]
+		u2 = @view ū[:,:,i]
+		g = gradient_reg(p(α),op,p,u1,u2)
+		grad .+= g
+	end
+	return grad
+end
+
+function gradient_reg(α::AbstractArray,op::LinOp,pOp::PatchOp,u::AbstractArray{T,2}, ū::AbstractArray{T,2}) where T
 	u = Float64.(Gray{Float64}.(u))
 	ū = Float64.(Gray{Float64}.(ū))
 	# Obtain Active and inactive sets
-	n = size(u,1)
+	m,n = size(u)
 	γ = 1e8
-	G = matrix(op,n)
+	G = matrix(op,m)
 	Gu = G*u[:]
 	nGu = xi(Gu)
 	act1 = nGu .- 1/γ
@@ -193,34 +208,15 @@ function gradient_reg(α::AbstractArray,op::LinOp,u::AbstractArray{T,2}, ū::Ab
 	den = Act*nGu + inact
 	Den = spdiagm(0=>1 ./den)
 	prodGuGu = prodesc(Gu./(den.^3),Gu)
-	I = spdiagm(0=>ones(n^2))
+	I = spdiagm(0=>ones(m*n))
 	B = γ*Inact
 	C = (Act*(prodGuGu-Den))
-	p = (I+spdiagm(0=>α[:])*G'*(B-C)*G)\(ū[:]-u[:])
-
-	return spdiagm(0=>p[:])*(G'*(Act*Den*Gu+γ*Inact*Gu))
-
+	p = (I+ α[:] .*G'*(B-C)*G)\(ū[:]-u[:])
+	grad = reshape(spdiagm(0=>p)*(G'*(Act*Den*Gu+γ*Inact*Gu)),m,n)
+	return calc_adjoint(pOp,grad)
 end
 
-function gradient(α::AbstractArray, op::LinOp, u::AbstractArray{T,3}, ū::AbstractArray{T,3}) where T
-	
-	M,N,O = size(u)
-	m,n = size(α)
-	p = PatchOp(α,u[:,:,1]) # Adjust parameter size
-	ᾱ = zeros(p.size_out)
-	inplace!(ᾱ,p,α)
-	grad = zeros(size(ᾱ[:]))
-	for i = 1:O
-		u1 = @view u[:,:,i]
-		u2 = @view ū[:,:,i]
-		g = gradient_reg(ᾱ,op,u1,u2)
-		grad .+= g
-	end
-	grad = reshape(grad,M,N)
-	grad₊ = zeros(size(α))
-	inplace!(grad₊,p',grad)
-	return grad₊
-end
+
 
 function gradient(α::AbstractArray, op::LinOp, u::AbstractArray{T,2}, ū::AbstractArray{T,2}) where T
 	u = Float64.(Gray{Float64}.(u))
