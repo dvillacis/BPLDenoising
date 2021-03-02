@@ -1,0 +1,210 @@
+########################################################
+# Bilevel Parameter Learning via Nonsmooth Trust Region (Vectorized Mode)
+########################################################
+
+using SparseArrays
+
+using AlgTools
+using AlgTools.Util
+import AlgTools.Iterate
+
+using VariationalImaging.GradientOps
+using VariationalImaging.Util
+
+using LinearAlgebra
+using LinearOperators,Krylov
+
+export bilevel_learn
+
+#############
+# Data types
+#############
+
+ImageSize = Tuple{Integer,Integer}
+Image = Array{Float64,2}
+Primal = Image
+Dual = Array{Float64,3}
+Parameter = Union{Real,AbstractArray}
+Dataset = Tuple{Array{Float64,3},Array{Float64,3}}
+
+#########################
+# Iterate initialisation
+#########################
+
+function init_rest(x::Real,learning_function::Function,Δ,ds)
+    x̄ = copy(x)
+    u,fx,gx = learning_function(x,ds)
+    ū = copy(u)
+    fx̄ = copy(fx)
+    gx̄ = copy(gx)
+    B = 0.1
+    return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
+end
+
+function init_rest(x::AbstractArray{T,2},learning_function::Function,Δ,ds) where T
+    x̄ = copy(x)
+    u,fx,gx = learning_function(x,ds)
+    ū = copy(u)
+    fx̄ = copy(fx)
+    gx̄ = copy(gx)
+    B = LBFGSOperator(length(x[:]))
+    return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
+end
+
+
+############
+# Auxiliary Functions
+############
+
+# Dogleg step calculation using l_\infty ball
+function dogleg_box(x::Real,gx,B,Δ)
+    lb,ub = get_bounds(x,Δ)
+    #@info lb,ub
+    pn = B\gx
+    if in_bounds(lb,Δ,pn)
+        return pn
+    end
+    p = -(norm(gx)^2/(gx'*(B*gx)))*gx # Cauchy Step
+    if in_bounds(lb,Δ,p) == false
+        #@info "Scaled"
+        t = step_to_bound(p/norm(p),lb,Δ)
+        return (p/norm(p))*t
+    end
+    #@info "Dogleg"
+    t = step_to_bound(pn-p,lb,Δ)
+    return p + t * (pn-p)
+end
+
+# Dogleg step calculation using l_\infty ball
+function dogleg_box(x::AbstractArray{T,2},gx,B,Δ) where T
+    lb,ub = get_bounds(x,Δ)
+    pn = newton_step(B,gx)
+    if in_bounds(lb,Δ,pn)
+        return pn
+    end
+    p = cauchy_step(B,gx)
+    if in_bounds(lb,Δ,p) == false
+        @info "Scaled"
+        t = step_to_bound(p/norm₂(p),lb,Δ)
+        return (p/norm₂(p)) .*t
+    end
+    @info "Dogleg"
+    t = step_to_bound(pn-p,lb,Δ)
+    return p + t .* (pn-p)
+end
+
+function newton_step(B::LinearOperators.LBFGSOperator,gx::AbstractArray)
+    pn, ks = Krylov.cg(B,-gx[:])
+    if ks.solved == false
+        @error ks
+    end
+    return reshape(pn,size(gx)...)
+end
+
+function cauchy_step(B::LinearOperators.LBFGSOperator,gx::AbstractArray)
+    p = -(norm(gx[:])^2/(gx[:]'*(B*gx[:])))*gx[:]
+    return reshape(p,size(gx)...)
+end
+
+# Distance to l_\infty bound
+function step_to_bound(p,lb,ub)
+    dist = max.(lb ./ p, ub ./ p)
+    return dist
+end
+
+# Test if vector is within the l_\infty ball
+function in_bounds(lb,ub,x)
+    return all(x .>= lb) && all(x .<= ub)
+end
+
+# Get bounds for the l_\infty ball intersected with positive quadrant
+function get_bounds(x,Δ)
+    lb = max.(-Δ,eps() .-x)
+    ub = Δ * ones(size(x))
+    return lb,ub
+end
+
+function pred(B::LinearOperators.LBFGSOperator,p,gx)
+    return -p[:]'*gx[:] -0.5 * p[:]'*(B*p[:])
+end
+
+function updateBFGS!(B::LinearOperators.LBFGSOperator,y,s)
+    if y[:]'*(B*y[:]) > 0
+        push!(B,y[:],s[:])
+    end
+    return B
+end
+
+############
+# Algorithm
+############
+
+function bilevel_learn(ds :: Dataset,
+    learning_function::Function;
+    xinit :: Parameter,
+    iterate = Iterate.simple_iterate,
+    params::NamedTuple)
+
+    ################################                                        
+    # Extract and set up parameters
+    ################################                    
+
+    η₁, η₂ = params.η₁, params.η₂
+    β₁, β₂ =  params.β₁, params.β₂
+    Δ₀ = params.Δ₀
+    parsize = size(xinit)
+
+    ######################
+    # Initialise iterates
+    ######################
+    x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B = init_rest(xinit,learning_function,Δ₀,ds)
+
+    ####################
+    # Run the algorithm
+    ####################
+
+    v = iterate(params) do verbose :: Function
+        
+        #println("x=$(norm(x,1)/length(x)), Δ=$Δ, gx=$gx")
+
+        p = dogleg_box(x,gx,B,Δ) # solve tr subproblem
+
+        x̄ = x + p  # test new point
+
+        ū,fx̄,gx̄ = learning_function(x̄,ds)
+        predf = pred(B,p,gx)
+        ρ = (fx-fx̄)/predf # ared/pred
+        println("ρ=$ρ, ared = $(fx-fx̄), pred = $(predf)")
+
+        updateBFGS!(B,gx̄-gx,p)
+
+        if ρ < η₁               # radius update
+            Δ = β₁*Δ
+        elseif ρ > η₂
+            Δ = β₂*Δ
+        end
+
+        if predf < 0
+            Δ = β₁*Δ
+        end
+
+        if ρ > 1e-3
+            x = x̄
+            u = ū
+            fx = fx̄
+            gx = gx̄
+        end
+
+        ################################
+        # Give function value if needed
+        ################################
+        v = verbose() do    
+            x, u[:,:,1], fx, norm₂(gx), Δ # just show the first image on the dataset
+            #fx,u[:,:,1]
+        end
+
+        v
+    end
+
+    return x, u, v
+end

@@ -25,8 +25,9 @@ using VariationalImaging.GradientOps
 using VariationalImaging.OpDenoise
 
 include("BilevelVisualise.jl")
-include("Bilevel.jl")
-include("TVLearningFunctionOp.jl")
+include("TRBox.jl")
+#include("TVLearningFunctionOp.jl")
+include("TVLearningFunctionVec.jl")
 include("SumRegsLearningFunction.jl")
 
 using BPLDenoising.BilevelVisualise
