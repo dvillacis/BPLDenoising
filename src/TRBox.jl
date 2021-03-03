@@ -94,7 +94,7 @@ function dogleg_box(x::AbstractArray{T,2},gx,B,Δ) where T
 end
 
 function newton_step(B::LinearOperators.LBFGSOperator,gx::AbstractArray)
-    pn, ks = Krylov.cg(B,-gx[:])
+    pn, ks = Krylov.cg_lanczos(B,-gx[:])
     if ks.solved == false
         @error ks
     end
