@@ -162,7 +162,7 @@ function generate_2d_cost_plot(dataset_name)
 
     @load joinpath(cost_path,dataset_name*"_cost_2d.jld2") parameter_range_1 parameter_range_2 costs
     c = reshape(costs,length(parameter_range_1),length(parameter_range_2))
-    p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=22:0.1:27),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
+    p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=24.1:0.5:27),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
     #p = Axis(Plots.Image(costs,(0.005,0.03),(0.005,0.03)),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.tex"),p,include_preamble=false)
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.pdf"),p)

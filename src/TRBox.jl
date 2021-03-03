@@ -41,7 +41,7 @@ function init_rest(x::Real,learning_function::Function,Δ,ds)
     return x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B
 end
 
-function init_rest(x::AbstractArray{T,2},learning_function::Function,Δ,ds) where T
+function init_rest(x::Union{AbstractArray{T,3},AbstractArray{T,2},AbstractArray{T,1}},learning_function::Function,Δ,ds) where T
     x̄ = copy(x)
     u,fx,gx = learning_function(x,ds,Δ)
     ū = copy(u)
@@ -76,7 +76,7 @@ function dogleg_box(x::Real,gx,B,Δ)
 end
 
 # Dogleg step calculation using l_\infty ball
-function dogleg_box(x::AbstractArray{T,2},gx,B,Δ) where T
+function dogleg_box(x::Union{AbstractArray{T,3},AbstractArray{T,2},AbstractArray{T,1}},gx,B,Δ) where T
     lb,ub = get_bounds(x,Δ)
     pn = newton_step(B,gx)
     if in_bounds(lb,Δ,pn)

@@ -5,17 +5,21 @@ using AlgTools.LinOps
 ###################
 # Learning function
 ###################
-function sumregs_learning_function(x::AbstractVector{Float64},data)
+function sumregs_learning_function(x::AbstractVector{Float64},data,Δ;Δt=1e-3)
 	op₁ = FwdGradientOp()
 	op₂ = BwdGradientOp()
 	op₃ = CenteredGradientOp()
     u = sumregs_denoise(data[2],x,op₁,op₂,op₃)
     cost = 0.5*norm₂²(u-data[1])
-    grad = sumregs_gradient(x,op₁,op₂,op₃,u,data[1])
+	if Δ > Δt
+    	grad = sumregs_gradient(x,op₁,op₂,op₃,u,data[1])
+	else
+		grad = sumregs_gradient_reg(x,op₁,op₂,op₃,u,data[1])
+	end
     return u,cost,grad
 end
 
-function sumregs_learning_function(x::AbstractArray{T,3},data) where T
+function sumregs_learning_function(x::AbstractArray{T,3},data,Δ;Δt=1e-3) where T
 	op₁ = FwdGradientOp()
 	op₂ = BwdGradientOp()
 	op₃ = CenteredGradientOp()
@@ -23,7 +27,11 @@ function sumregs_learning_function(x::AbstractArray{T,3},data) where T
 	pOp = PatchOp(x[:,:,1],ū[:,:,1])
     u = sumregs_denoise(data[2],x,op₁,op₂,op₃,pOp)
     cost = 0.5*norm₂²(u-ū)
-    grad = sumregs_gradient(x,op₁,op₂,op₃,pOp,u,ū)
+	if Δ > Δt
+    	grad = sumregs_gradient(x,op₁,op₂,op₃,pOp,u,ū)
+	else
+		grad = sumregs_gradient_reg(x,op₁,op₂,op₃,pOp,u,ū)
+	end
     return u,cost,grad
 end
 
@@ -82,6 +90,18 @@ function sumregs_gradient(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,o
 	for i = 1:O
 		u1 = @view u[:,:,i]
 		u2 = @view ū[:,:,i]
+		g = sumregs_gradient(x,op₁,op₂,op₃,u1,u2)
+		grad += g
+	end
+	return grad
+end
+
+function sumregs_gradient_reg(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,op₃::LinOp,u::AbstractArray{T,3},ū::AbstractArray{T,3}) where T
+	M,N,O = size(u)
+	grad = zeros(size(x))
+	for i = 1:O
+		u1 = @view u[:,:,i]
+		u2 = @view ū[:,:,i]
 		g = sumregs_gradient_reg(x,op₁,op₂,op₃,u1,u2)
 		grad += g
 	end
@@ -89,6 +109,7 @@ function sumregs_gradient(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,o
 end
 
 function sumregs_gradient_reg(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,op₃::LinOp,u::AbstractArray{T,2},ū::AbstractArray{T,2}) where T
+	@info "Using reg gradient"
 	u = Float64.(Gray{Float64}.(u))
 	ū = Float64.(Gray{Float64}.(ū))
 	# Obtain Active and inactive sets
@@ -146,6 +167,19 @@ function sumregs_gradient_reg(x::AbstractVector{Float64},op₁::LinOp,op₂::Lin
 end
 
 function sumregs_gradient(x::AbstractArray{T,3},op₁::LinOp,op₂::LinOp,op₃::LinOp,pOp::PatchOp,u::AbstractArray{T,3},ū::AbstractArray{T,3}) where T
+	
+	M,N,O = size(u)
+	grad = zeros(size(x))
+	for i = 1:O
+		u1 = @view u[:,:,i]
+		u2 = @view ū[:,:,i]
+		g = sumregs_gradient(x,op₁,op₂,op₃,pOp,u1,u2)
+		grad += g
+	end
+	return grad
+end
+
+function sumregs_gradient_reg(x::AbstractArray{T,3},op₁::LinOp,op₂::LinOp,op₃::LinOp,pOp::PatchOp,u::AbstractArray{T,3},ū::AbstractArray{T,3}) where T
 	
 	M,N,O = size(u)
 	grad = zeros(size(x))
@@ -227,7 +261,7 @@ function sumregs_gradient_reg(x::AbstractArray{T,3},op₁::LinOp,op₂::LinOp,op
 	return gx
 end
 
-function gradient(x₁::Real,x₂::Real,x₃::Real,op₁::LinOp,op₂::LinOp,op₃::LinOp,u::AbstractArray{T,2},ū::AbstractArray{T,2}) where T
+function sumregs_gradient(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,op₃::LinOp,u::AbstractArray{T,2},ū::AbstractArray{T,2}) where T
 	u = Float64.(Gray{Float64}.(u))
 	ū = Float64.(Gray{Float64}.(ū))
 	# Obtain Active and inactive sets
@@ -281,7 +315,7 @@ function gradient(x₁::Real,x₂::Real,x₃::Real,op₁::LinOp,op₂::LinOp,op�
 	## prod KuKuᵗ/norm³
 	prodKuKu₃ = prodesc(Gu₃ ./den₃.^3,Gu₃)
 	
-	Adj = [spdiagm(0=>ones(n^2)) x₁*G₁' x₂*G₃' x₃*G₃';
+	Adj = [spdiagm(0=>ones(n^2)) x[1]*G₁' x[2]*G₃' x[3]*G₃';
 			Act₁*G₁+Inact₁*(prodKuKu₁-Den₁)*G₁ Inact₁+eps()*Act₁ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2);
 			Act₂*G₂+Inact₂*(prodKuKu₂-Den₂)*G₂ spzeros(2*n^2,2*n^2) Inact₂+eps()*Act₂ spzeros(2*n^2,2*n^2);
 			Act₃*G₃+Inact₃*(prodKuKu₃-Den₃)*G₃ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2) Inact₃+eps()*Act₃]
@@ -293,14 +327,11 @@ function gradient(x₁::Real,x₂::Real,x₃::Real,op₁::LinOp,op₂::LinOp,op�
 end
 
 
-
-
-
-function gradient(x₁::AbstractArray,x₂::AbstractArray,x₃::AbstractArray,op₁::LinOp,op₂::LinOp,op₃::LinOp,u::AbstractArray{T,2},ū::AbstractArray{T,2}) where T
+function sumregs_gradient(x::AbstractArray{T,3},op₁::LinOp,op₂::LinOp,op₃::LinOp,pOp::PatchOp,u::AbstractArray{T,2},ū::AbstractArray{T,2}) where T
 	u = Float64.(Gray{Float64}.(u))
 	ū = Float64.(Gray{Float64}.(ū))
 	# Obtain Active and inactive sets
-	n = size(u,1)
+	m,n = size(u)
 	
 	# Generate centered gradient matrix fwd
 	G₁ = matrix(op₁,n)
@@ -349,7 +380,11 @@ function gradient(x₁::AbstractArray,x₂::AbstractArray,x₃::AbstractArray,op
 	
 	## prod KuKuᵗ/norm³
 	prodKuKu₃ = prodesc(Gu₃ ./den₃.^3,Gu₃)
-	
+
+	x₁ = pOp(x[:,:,1])
+	x₂ = pOp(x[:,:,2])
+	x₃ = pOp(x[:,:,3])
+
 	Adj = [spdiagm(0=>ones(n^2)) spdiagm(0=>x₁[:])*G₁' spdiagm(0=>x₂[:])*G₃' spdiagm(0=>x₃[:])*G₃';
 			Act₁*G₁+Inact₁*(prodKuKu₁-Den₁)*G₁ Inact₁+eps()*Act₁ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2);
 			Act₂*G₂+Inact₂*(prodKuKu₂-Den₂)*G₂ spzeros(2*n^2,2*n^2) Inact₂+eps()*Act₂ spzeros(2*n^2,2*n^2);
@@ -358,6 +393,16 @@ function gradient(x₁::AbstractArray,x₂::AbstractArray,x₃::AbstractArray,op
 	Track=[(u[:]-ū[:]);zeros(6*n^2)]
 	mult = Adj\Track
 	p = @view mult[1:n^2]
-	return [-spdiagm(0=>p[:])*(G₁'*Inact₁*Den₁*Gu₁);-spdiagm(0=>p[:])*(G₂'*Inact₂*Den₂*Gu₂);-spdiagm(0=>p[:])*(G₃'*Inact₃*Den₃*Gu₃)] 
+
+	g₁ = reshape(-spdiagm(0=>p[:])*(G₁'*Inact₁*Den₁*Gu₁),m,n)
+	g₂ = reshape(-spdiagm(0=>p[:])*(G₂'*Inact₂*Den₂*Gu₂),m,n)
+	g₃ = reshape(-spdiagm(0=>p[:])*(G₃'*Inact₃*Den₃*Gu₃),m,n)
+
+	gx = zeros(pOp.size_in...,3)
+
+	gx[:,:,1] = calc_adjoint(pOp,g₁)
+	gx[:,:,2] = calc_adjoint(pOp,g₂)
+	gx[:,:,3] = calc_adjoint(pOp,g₃)
+	return gx 
 end
 
