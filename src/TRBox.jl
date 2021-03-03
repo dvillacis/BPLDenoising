@@ -33,7 +33,7 @@ Dataset = Tuple{Array{Float64,3},Array{Float64,3}}
 
 function init_rest(x::Real,learning_function::Function,Δ,ds)
     x̄ = copy(x)
-    u,fx,gx = learning_function(x,ds)
+    u,fx,gx = learning_function(x,ds,Δ)
     ū = copy(u)
     fx̄ = copy(fx)
     gx̄ = copy(gx)
@@ -43,7 +43,7 @@ end
 
 function init_rest(x::AbstractArray{T,2},learning_function::Function,Δ,ds) where T
     x̄ = copy(x)
-    u,fx,gx = learning_function(x,ds)
+    u,fx,gx = learning_function(x,ds,Δ)
     ū = copy(u)
     fx̄ = copy(fx)
     gx̄ = copy(gx)
@@ -128,9 +128,20 @@ function pred(B::LinearOperators.LBFGSOperator,p,gx)
     return -p[:]'*gx[:] -0.5 * p[:]'*(B*p[:])
 end
 
+function pred(B::Real,p,gx)
+    return -p*gx - 0.5*p*B*p
+end
+
 function updateBFGS!(B::LinearOperators.LBFGSOperator,y,s)
     if y[:]'*(B*y[:]) > 0
         push!(B,y[:],s[:])
+    end
+    return B
+end
+
+function updateBFGS!(B::Real,y,s)
+    if y'*(B*y) > 0
+        B = B + (y*y)/(y*s) - (B*s*s*B)/(s*B*s)
     end
     return B
 end
@@ -171,10 +182,10 @@ function bilevel_learn(ds :: Dataset,
 
         x̄ = x + p  # test new point
 
-        ū,fx̄,gx̄ = learning_function(x̄,ds)
+        ū,fx̄,gx̄ = learning_function(x̄,ds,Δ)
         predf = pred(B,p,gx)
         ρ = (fx-fx̄)/predf # ared/pred
-        println("ρ=$ρ, ared = $(fx-fx̄), pred = $(predf)")
+        #println("ρ=$ρ, ared = $(fx-fx̄), pred = $(predf)")
 
         updateBFGS!(B,gx̄-gx,p)
 

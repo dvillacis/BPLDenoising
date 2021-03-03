@@ -1,6 +1,7 @@
 module BPLDenoising
 
 export generate_scalar_tv_cost, generate_cost_plot
+export generate_2d_tv_cost, generate_2d_cost_plot
 export scalar_bilevel_tv_learn, patch_bilevel_tv_learn
 export scalar_bilevel_sumregs_learn, patch_bilevel_sumregs_learn
 
@@ -35,7 +36,7 @@ using BPLDenoising.BilevelVisualise
 
 const default_save_prefix = "output"
 
-function TVDenoise(data,parameter)
+function TVDenoise(data,parameter::Real)
     denoise_params = (
         ρ = 0,
         α = parameter,
@@ -45,12 +46,35 @@ function TVDenoise(data,parameter)
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 1000,
-        verbose_iter = 1001,
+        maxiter = 2000,
+        verbose_iter = 2001,
         save_iterations = false
     )
     st, iterate = initialise_visualisation(false)
-    out = op_denoise_pdps(data,op; iterate=iterate, params=denoise_params)
+    out = op_denoise_pdps(data; iterate=iterate, params=denoise_params)
+    finalise_visualisation(st)
+    return out
+end
+
+function TVDenoise(data,parameter::AbstractArray)
+    p = PatchOp(parameter,data[:,:,1]) # Adjust parameter size
+	x̄ = zeros(p.size_out)
+	inplace!(x̄,p,parameter)
+    denoise_params = (
+        ρ = 0,
+        α = x̄,
+        op = FwdGradientOp(),
+        # PDPS
+        τ₀ = 5,
+        σ₀ = 0.99/5,
+        accel = true,
+        save_results = false,
+        maxiter = 2000,
+        verbose_iter = 2001,
+        save_iterations = false
+    )
+    st, iterate = initialise_visualisation(false)
+    out = op_denoise_pdps(data; iterate=iterate, params=denoise_params)
     finalise_visualisation(st)
     return out
 end
@@ -63,13 +87,17 @@ end
 # Scalar Cost Function Plotting
 ################################
 
-function generate_cost(dataset_name, parameter_range, cost_function, denoise_function)
+function generate_cost(dataset_name, parameter_range, cost_function, denoise_function;freq=10)
     true_,data = testdataset(dataset_name)
     costs = zeros(size(parameter_range))
+    iter = 1
     for i = 1:length(parameter_range)
         u = denoise_function(data,parameter_range[i])
         costs[i] = cost_function(u,true_)
-        @info "Denoising parameter $(parameter_range[i]): cost = $(costs[i])"
+        if iter%freq == 0
+            @info "Denoising parameter $(parameter_range[i]): cost = $(costs[i])"
+        end
+        iter += 1
     end
     output_dir = joinpath(default_save_prefix, dataset_name)
     if isdir(output_dir) == false
@@ -87,8 +115,9 @@ function generate_cost_plot(dataset_name)
     end
 
     @load joinpath(cost_path,dataset_name*"_cost.jld2") parameter_range costs
-    p = Axis(Plots.Linear(parameter_range,costs,mark="none"), xlabel=L"$\alpha$", ylabel=L"$\|u-\bar{u}\|^2$", title="Scalar Cost")
-    PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot.tex"),p)
+    pushPGFPlotsOptions("scale=0.8")
+    p = Axis(Plots.Linear(parameter_range,costs,mark="none"),style="grid=both", xlabel=L"$\alpha$", ylabel=L"$\|u-\bar{u}\|^2$", title="Scalar Cost")
+    PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot.tex"),p,include_preamble=false)
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot.pdf"),p)
 end
 
@@ -97,6 +126,56 @@ function generate_scalar_tv_cost(dataset_name, parameter_range)
     return generate_cost(dataset_name,parameter_range,L2CostFunction,TVDenoise)
 end
 
+################################
+# 2D Cost Function Plotting
+################################
+
+function generate_2d_cost(dataset_name, parameter_range_1, parameter_range_2, cost_function, denoise_function;freq=10)
+    true_,data = testdataset(dataset_name)
+    costs = zeros(length(parameter_range_1),length(parameter_range_2))
+    iter = 1
+    for i = 1:length(parameter_range_1)
+        for j = 1:length(parameter_range_2)
+            α = [parameter_range_1[i];parameter_range_2[j]] .* ones(2,1)
+            u = denoise_function(data,α)
+            costs[i,j] = cost_function(u,true_)
+            if iter%freq == 0
+                @info "Denoising parameter $α: cost = $(costs[i,j])"
+            end
+            iter += 1
+        end
+    end
+    output_dir = joinpath(default_save_prefix, dataset_name)
+    if isdir(output_dir) == false
+        mkpath(output_dir)
+    end
+    @save joinpath(output_dir, dataset_name*"_cost_2d.jld2") parameter_range_1 parameter_range_2 costs
+end
+
+function generate_2d_cost_plot(dataset_name)
+    cost_path = joinpath(default_save_prefix,dataset_name)
+
+    if isdir(cost_path) == false
+        @error "No cost calculation found at $cost_path"
+        return false
+    end
+
+    @load joinpath(cost_path,dataset_name*"_cost_2d.jld2") parameter_range_1 parameter_range_2 costs
+    #c = reshape(costs,length(parameter_range_1),length(parameter_range_2))
+    #p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=22:0.1:27),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
+    p = Axis(Plots.Image(costs,(0.005,0.03),(0.005,0.03)),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
+    PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.tex"),p,include_preamble=false)
+    PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.pdf"),p)
+end
+
+function generate_2d_tv_cost(dataset_name, parameter_range_1, parameter_range_2)
+    return generate_2d_cost(dataset_name,parameter_range_1,parameter_range_2,L2CostFunction,TVDenoise)
+end
+
+
+################################
+# Save Experiments Results
+################################
 
 function save_results(params, b, b_data, x::Union{Real,AbstractVector{Float64}}, opt_img, st)
     if params.save_results

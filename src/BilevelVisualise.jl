@@ -208,7 +208,7 @@ function iterate_bilevel_visualise(st :: BilevelState,
                     st = @set st.log=LinkedListEntry(entry, st.log)
                     
                     if verb
-                        @printf("%d/%d x=%f,f=%f, g=%f, Δ=%f\n", iter, params.maxiter, norm₂(par), value, g, Δ)
+                        @printf("%d/%d x=%f, f=%f, g=%f, Δ=%f\n", iter, params.maxiter, norm₂(par), value, g, Δ)
                         if par isa Union{Real,AbstractVector}
                             bilevel_visualise(st.vis, (x,))
                         elseif par isa AbstractArray{Float64,3}
@@ -217,7 +217,12 @@ function iterate_bilevel_visualise(st :: BilevelState,
                             bilevel_visualise(st.vis, (x,par_[:,:,1],par_[:,:,2],par_[:,:,3],))
                         else
                             pOp = PatchOp(par,x)
-                            par_ = adjust_histogram(pOp(par),LinearStretching())
+                            par_ = Gray.(pOp(par))
+                            if abs(maximum(par_)-minimum(par)) < sqrt(eps()) 
+                                par_ = (par_ .- minimum(par_)) ./ (maximum(par_))
+                            else
+                                par_ = (par_ .- minimum(par_)) ./ (maximum(par_)-minimum(par_))
+                            end
                             bilevel_visualise(st.vis, (x,par_,))
                         end
                     end

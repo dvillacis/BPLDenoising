@@ -11,11 +11,15 @@ Dual = Array{Float64,3}
 ###################
 # Learning function
 ###################
-function tv_op_learning_function(x,data)
+function tv_op_learning_function(x,data,Δ;Δt=1e-3)
     op = FwdGradientOp()
     u = denoise(data[2],x,op)
     cost = 0.5*norm₂²(u-data[1])
-    grad = gradient(x,op,u,data[1])
+	if Δ > Δt
+    	grad = gradient(x,op,u,data[1])
+	else
+		grad = gradient_reg(x,op,u,data[1])
+	end
     return u,cost,grad
 end
 
@@ -33,8 +37,8 @@ function denoise(data,x::Real,op::LinOp)
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 20000,
-        verbose_iter = 20001,
+        maxiter = 2000,
+        verbose_iter = 2001,
         save_iterations = false
     )
     st_opt, iterate_opt = initialise_visualisation(false)
@@ -56,12 +60,11 @@ function denoise(data,x::AbstractArray,op::LinOp)
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 20000,
-        verbose_iter = 20001,
+        maxiter = 2000,
+        verbose_iter = 2001,
         save_iterations = false
     )
     st_opt, iterate_opt = initialise_visualisation(false)
-    
     opt_img = op_denoise_pdps(data; iterate=iterate_opt, params=denoise_params)
     finalise_visualisation(st_opt)
     return opt_img
@@ -69,6 +72,19 @@ end
 
 function gradient(α::Real,op::LinOp,u::AbstractArray{T,3},ū::AbstractArray{T,3}) where T
 	
+	M,N,O = size(u)
+	grad = 0
+	for i = 1:O
+		u1 = @view u[:,:,i]
+		u2 = @view ū[:,:,i]
+		g = gradient(α,op,u1,u2)
+		grad += g 
+	end
+	return grad
+end
+
+function gradient_reg(α::Real,op::LinOp,u::AbstractArray{T,3},ū::AbstractArray{T,3}) where T
+	@info "Using reg gradient"
 	M,N,O = size(u)
 	grad = 0
 	for i = 1:O
@@ -105,13 +121,13 @@ function gradient(α::Real, op::LinOp, u::AbstractArray{T,2}, ū::AbstractArray
 	
 	# Adj = [spdiagm(0=>ones(n^2)) α*G';
 	# 		Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
-	Adj = [spdiagm(0=>ones(n^2)) -α*G';
-			Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
+	Adj = [spdiagm(0=>ones(n^2)) α*G';
+			Act*G+Inact*(prodKuKu-Den)*G Inact+sqrt(eps())*Act]
 	
-	Track=[(-u[:]+ū[:]);zeros(2*n^2)]
+	Track=[(u[:]-ū[:]);zeros(2*n^2)]
 	mult = Adj\Track
 	p = @view mult[1:n^2]
-	return p'*(G'*Inact*Den*Gu)
+	return -p'*(G'*Inact*Den*Gu)
 end
 
 function gradient_reg(α::Real,op::LinOp,u::AbstractArray{T,2}, ū::AbstractArray{T,2}) where T
@@ -141,7 +157,21 @@ function gradient_reg(α::Real,op::LinOp,u::AbstractArray{T,2}, ū::AbstractArr
 end
 
 function gradient(α::AbstractArray, op::LinOp, u::AbstractArray{T,3}, ū::AbstractArray{T,3}) where T
-	
+	M,N,O = size(u)
+	m,n = size(α)
+	p = PatchOp(α,u[:,:,1]) # Adjust parameter size
+	grad = zeros(size(α))
+	for i = 1:O
+		u1 = @view u[:,:,i]
+		u2 = @view ū[:,:,i]
+		g = gradient(p(α),op,p,u1,u2)
+		grad .+= g
+	end
+	return grad
+end
+
+function gradient_reg(α::AbstractArray, op::LinOp, u::AbstractArray{T,3}, ū::AbstractArray{T,3}) where T
+	@info "Using reg gradient"
 	M,N,O = size(u)
 	m,n = size(α)
 	p = PatchOp(α,u[:,:,1]) # Adjust parameter size
@@ -182,11 +212,11 @@ end
 
 
 
-function gradient(α::AbstractArray, op::LinOp, u::AbstractArray{T,2}, ū::AbstractArray{T,2}) where T
+function gradient(α::AbstractArray, op::LinOp, pOp::PatchOp, u::AbstractArray{T,2}, ū::AbstractArray{T,2}) where T
 	u = Float64.(Gray{Float64}.(u))
 	ū = Float64.(Gray{Float64}.(ū))
 	# Obtain Active and inactive sets
-	n = size(u,1)
+	m,n = size(u)
 	M,N = size(α)
 	
 	# Generate centered gradient matrix
@@ -207,11 +237,13 @@ function gradient(α::AbstractArray, op::LinOp, u::AbstractArray{T,2}, ū::Abst
 	prodKuKu = prodesc(Gu ./den.^3,Gu)
 	# Adj = [spdiagm(0=>ones(n^2)) spdiagm(0=>α[:])*G';
 	# 		Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
-	Adj = [spdiagm(0=>ones(n^2)) G';
-			Act*G+Inact*spdiagm(0=>[α[:];α[:]])*(prodKuKu-Den)*G Inact+eps()*Act]
+	Adj = [spdiagm(0=>ones(n^2)) spdiagm(0=>α[:])G';
+			Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
 	
 	Track=[(u[:]-ū[:]);zeros(2*n^2)]
 	mult = Adj\Track
 	p = @view mult[1:n^2]
-	return -spdiagm(0=>p[:])*(G'*Inact*Den*Gu)
+	grad = -spdiagm(0=>p[:])*(G'*Inact*Den*Gu)
+	grad = reshape(grad,m,n)
+	return calc_adjoint(pOp,grad)
 end
