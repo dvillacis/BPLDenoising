@@ -12,13 +12,15 @@ Dual = Array{Float64,3}
 # Learning function
 ###################
 function tv_op_learning_function(x,data,Δ;Δt=1e-3)
+	ū = data[1]
+	f = data[2]
     op = FwdGradientOp()
-    u = denoise(data[2],x,op)
-    cost = 0.5*norm₂²(u-data[1])
+    u = denoise(f,x,op)
+    cost = 0.5*norm₂²(u-ū)
 	if Δ > Δt
-    	grad = gradient(x,op,u,data[1])
+    	grad = gradient(x,op,u,ū)
 	else
-		grad = gradient_reg(x,op,u,data[1])
+		grad = gradient_reg(x,op,u,ū)
 	end
     return u,cost,grad
 end
@@ -27,22 +29,26 @@ end
 # Denoising
 ###################
 
+const denoising_default_params = (
+	ρ = 0,
+	# PDPS
+	τ₀ = 5,
+	σ₀ = 0.99/5,
+	accel = true,
+	save_results = false,
+	maxiter = 1000,
+	verbose_iter = 1001,
+	save_iterations = false
+)
+
 function denoise(data,x::Real,op::LinOp)
-    denoise_params = (
-        ρ = 0,
+    denoise_scalar_params = (
         α = x,
-        op = op,
-        # PDPS
-        τ₀ = 5,
-        σ₀ = 0.99/5,
-        accel = true,
-        save_results = false,
-        maxiter = 2000,
-        verbose_iter = 2001,
-        save_iterations = false
+		op = op
     )
+	params = denoising_default_params ⬿ denoise_scalar_params
     st_opt, iterate_opt = initialise_visualisation(false)
-    opt_img = op_denoise_pdps(data; iterate=iterate_opt, params=denoise_params)
+    opt_img = op_denoise_pdps(data; iterate=iterate_opt, params=params)
     finalise_visualisation(st_opt)
     return opt_img
 end
@@ -51,21 +57,13 @@ function denoise(data,x::AbstractArray,op::LinOp)
 	p = PatchOp(x,data[:,:,1]) # Adjust parameter size
 	x̄ = zeros(p.size_out)
 	inplace!(x̄,p,x)
-    denoise_params = (
-        ρ = 0,
+    denoise_patch_params = (
         α = x̄,
-		op = op,
-        # PDPS
-        τ₀ = 5,
-        σ₀ = 0.99/5,
-        accel = true,
-        save_results = false,
-        maxiter = 2000,
-        verbose_iter = 2001,
-        save_iterations = false
+		op = op
     )
+	params = denoising_default_params ⬿ denoise_patch_params
     st_opt, iterate_opt = initialise_visualisation(false)
-    opt_img = op_denoise_pdps(data; iterate=iterate_opt, params=denoise_params)
+    opt_img = op_denoise_pdps(data; iterate=iterate_opt, params=params)
     finalise_visualisation(st_opt)
     return opt_img
 end

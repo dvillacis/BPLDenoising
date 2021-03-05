@@ -88,8 +88,10 @@ end
 # Scalar Cost Function Plotting
 ################################
 
-function generate_cost(dataset_name, parameter_range, cost_function, denoise_function;freq=10)
+function generate_cost(dataset_name, parameter_range, cost_function, denoise_function;freq=10,num_samples=1)
     true_,data = testdataset(dataset_name)
+    true_ = Float64.(Gray{Float64}.(true_))[:,:,1:num_samples]
+    data = Float64.(Gray{Float64}.(data))[:,:,1:num_samples]
     costs = zeros(size(parameter_range))
     iter = 1
     for i = 1:length(parameter_range)
@@ -122,16 +124,18 @@ function generate_cost_plot(dataset_name)
 end
 
 
-function generate_scalar_tv_cost(dataset_name, parameter_range)
-    return generate_cost(dataset_name,parameter_range,L2CostFunction,TVDenoise)
+function generate_scalar_tv_cost(dataset_name, parameter_range; num_samples=1)
+    return generate_cost(dataset_name,parameter_range,L2CostFunction,TVDenoise; num_samples)
 end
 
 ################################
 # 2D Cost Function Plotting
 ################################
 
-function generate_2d_cost(dataset_name, parameter_range_1, parameter_range_2, cost_function, denoise_function;freq=10)
+function generate_2d_cost(dataset_name, parameter_range_1, parameter_range_2, cost_function, denoise_function;freq=10,num_samples=1)
     true_,data = testdataset(dataset_name)
+    true_ = Float64.(Gray{Float64}.(true_))[:,:,1:num_samples]
+    data = Float64.(Gray{Float64}.(data))[:,:,1:num_samples]
     costs = zeros(length(parameter_range_1),length(parameter_range_2))
     iter = 1
     for i = 1:length(parameter_range_1)
@@ -162,14 +166,14 @@ function generate_2d_cost_plot(dataset_name)
 
     @load joinpath(cost_path,dataset_name*"_cost_2d.jld2") parameter_range_1 parameter_range_2 costs
     c = reshape(costs,length(parameter_range_1),length(parameter_range_2))
-    p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=24.1:0.5:27),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
+    p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=46.7:0.65:52),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
     #p = Axis(Plots.Image(costs,(0.005,0.03),(0.005,0.03)),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.tex"),p,include_preamble=false)
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.pdf"),p)
 end
 
-function generate_2d_tv_cost(dataset_name, parameter_range_1, parameter_range_2)
-    return generate_2d_cost(dataset_name,parameter_range_1,parameter_range_2,L2CostFunction,TVDenoise)
+function generate_2d_tv_cost(dataset_name, parameter_range_1, parameter_range_2;num_samples=1)
+    return generate_2d_cost(dataset_name,parameter_range_1,parameter_range_2,L2CostFunction,TVDenoise;num_samples)
 end
 
 
@@ -190,6 +194,7 @@ function save_results(params, b, b_data, x::Union{Real,AbstractVector{Float64}},
         open(qualityfile,"w") do io
             write(io,"img_num \t orig_ssim \t orig_psnr \t out_ssim \t out_psnr\n")
             M,N,O = size(b)
+            @info size(b)
             for i = 1:O
                 noisy_ssim = assess_ssim(b[:,:,i],b_data[:,:,i])
                 noisy_psnr = assess_psnr(b[:,:,i],b_data[:,:,i])
@@ -289,7 +294,8 @@ const default_params = (
     save_results = true,
     dataset_name = "cameraman128_5",
     save_iterations = false,
-    tol = 1e-5
+    tol = 1e-5,
+    num_samples = 1
 )
 
 const bilevel_params = (
@@ -307,8 +313,8 @@ function scalar_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefi
     params = params ⬿ (save_prefix = "tv_optimal_parameter_scalar_" * params.dataset_name,)
     # Load dataset
     b,b_noisy = TestDatasets.testdataset(params.dataset_name)
-    b = Float64.(Gray{Float64}.(b))
-    b_noisy = Float64.(Gray{Float64}.(b_noisy))
+    b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
+    b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
     # Launch (background) visualiser
     st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm
@@ -339,8 +345,8 @@ function patch_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefix
     params = params ⬿ (save_prefix = "tv_optimal_parameter_$(size(params.α₀))_" * params.dataset_name,)
     # Load dataset
     b,b_noisy = TestDatasets.testdataset(params.dataset_name)
-    b = Float64.(Gray{Float64}.(b))
-    b_noisy = Float64.(Gray{Float64}.(b_noisy))
+    b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
+    b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
     # Launch (background) visualiser
     st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm
@@ -374,8 +380,8 @@ function scalar_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_
     params = params ⬿ (save_prefix = "sumregs_optimal_parameter_scalar_" * params.dataset_name,)
     # Load dataset
     b,b_noisy = TestDatasets.testdataset(params.dataset_name)
-    b = Float64.(Gray{Float64}.(b))
-    b_noisy = Float64.(Gray{Float64}.(b_noisy))
+    b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
+    b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
     # Launch (background) visualiser
     st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm
@@ -406,8 +412,8 @@ function patch_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_p
     params = params ⬿ (save_prefix = "sumregs_optimal_parameter_patch_$(size(params.α₀))" * params.dataset_name,)
     # Load dataset
     b,b_noisy = TestDatasets.testdataset(params.dataset_name)
-    b = Float64.(Gray{Float64}.(b))
-    b_noisy = Float64.(Gray{Float64}.(b_noisy))
+    b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
+    b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
     # Launch (background) visualiser
     st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm

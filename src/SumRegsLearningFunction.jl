@@ -97,6 +97,7 @@ function sumregs_gradient(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,o
 end
 
 function sumregs_gradient_reg(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,op₃::LinOp,u::AbstractArray{T,3},ū::AbstractArray{T,3}) where T
+	@info "Using reg gradient"
 	M,N,O = size(u)
 	grad = zeros(size(x))
 	for i = 1:O
@@ -109,7 +110,6 @@ function sumregs_gradient_reg(x::AbstractVector{Float64},op₁::LinOp,op₂::Lin
 end
 
 function sumregs_gradient_reg(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,op₃::LinOp,u::AbstractArray{T,2},ū::AbstractArray{T,2}) where T
-	@info "Using reg gradient"
 	u = Float64.(Gray{Float64}.(u))
 	ū = Float64.(Gray{Float64}.(ū))
 	# Obtain Active and inactive sets
