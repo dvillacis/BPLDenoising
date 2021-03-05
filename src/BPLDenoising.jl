@@ -367,11 +367,9 @@ const sumregs_bilevel_params = (
     η₁ = 0.25,
     η₂ = 0.75,
     β₁ = 0.25,
-    β₂ = 1.5,
+    β₂ = 1.9,
     Δ₀ = 0.01,
-    α₀₁ = 0.0001,
-    α₀₂ = 0.0001,
-    α₀₃ = 0.0001
+    α₀ = [0.001;0.001;0.001]
 )
 
 function scalar_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_prefix, kwargs...)
@@ -385,7 +383,7 @@ function scalar_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_
     # Launch (background) visualiser
     st, iterate = initialise_bilevel_visualisation(visualise)
     # Run algorithm
-    x, u, st = bilevel_learn((b,b_noisy),sumregs_learning_function; xinit=[params.α₀₁;params.α₀₂;params.α₀₃],iterate=iterate, params=params)
+    x, u, st = bilevel_learn((b,b_noisy),sumregs_learning_function; xinit=params.α₀,iterate=iterate, params=params)
     adjust_histogram!(u,LinearStretching())
     # Save results
     save_results(params, b, b_noisy, x, u, st)
@@ -402,8 +400,8 @@ const patch_sumregs_bilevel_params = (
     η₂ = 0.75,
     β₁ = 0.25,
     β₂ = 1.5,
-    Δ₀ = 0.0001,
-    α₀ = 0.0001*ones(2,2,3)
+    Δ₀ = 0.1,
+    α₀ = 0.001*ones(2,2,3)
 )
 
 function patch_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_prefix, kwargs...)
