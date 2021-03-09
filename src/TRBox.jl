@@ -75,6 +75,26 @@ function dogleg_box(x::Real,gx,B,Δ)
     return p + t * (pn-p)
 end
 
+function dogbox(x::Real,gx,B,Δ)
+    lb,ub = get_bounds(x,Δ)
+    #@info lb,ub
+    pn = B\gx
+    if in_bounds(lb,Δ,pn)
+        return pn
+    end
+    p = -(norm(gx)^2/(gx'*(B*gx)))*gx # Cauchy Step
+    if in_bounds(lb,Δ,p) == false
+        @info "Dogbox"
+        t = step_to_bound(p,lb,Δ)
+        psc = p*t
+        t2 = step_to_bound(psc-pn,lb,Δ)
+        return psc + t2 * (psc-pn)
+    end
+    #@info "Dogleg"
+    t = step_to_bound(pn-p,lb,Δ)
+    return p + t * (pn-p)
+end
+
 # Dogleg step calculation using l_\infty ball
 function dogleg_box(x::Union{AbstractArray{T,3},AbstractArray{T,2},AbstractArray{T,1}},gx,B,Δ) where T
     lb,ub = get_bounds(x,Δ)
@@ -87,6 +107,25 @@ function dogleg_box(x::Union{AbstractArray{T,3},AbstractArray{T,2},AbstractArray
         @info "Scaled"
         t = step_to_bound(p/norm₂(p),lb,Δ)
         return (p/norm₂(p)) .*t
+    end
+    @info "Dogleg"
+    t = step_to_bound(pn-p,lb,Δ)
+    return p + t .* (pn-p)
+end
+
+function dogbox(x::Union{AbstractArray{T,3},AbstractArray{T,2},AbstractArray{T,1}},gx,B,Δ) where T
+    lb,ub = get_bounds(x,Δ)
+    pn = newton_step(B,gx)
+    if in_bounds(lb,Δ,pn)
+        return pn
+    end
+    p = cauchy_step(B,gx)
+    if in_bounds(lb,Δ,p) == false
+        @info "Dogbox"
+        t = step_to_bound(p,lb,Δ)
+        psc = t .* p
+        t2 = step_to_bound(pn-psc,lb,Δ)
+        return psc + t2 .* (pn-psc)
     end
     @info "Dogleg"
     t = step_to_bound(pn-p,lb,Δ)
@@ -178,13 +217,17 @@ function bilevel_learn(ds :: Dataset,
         
         #println("x=$(norm(x,1)/length(x)), Δ=$Δ, gx=$gx")
 
-        p = dogleg_box(x,gx,B,Δ) # solve tr subproblem
+        #p = dogleg_box(x,gx,B,Δ) # solve tr subproblem
+        p = dogbox(x,gx,B,Δ)
 
         x̄ = x + p  # test new point
 
         ū,fx̄,gx̄ = learning_function(x̄,ds,Δ)
         predf = pred(B,p,gx)
         ρ = (fx-fx̄)/predf # ared/pred
+        if predf == 0
+            @error "Problems with step calculated"
+        end
         #println("ρ=$ρ, ared = $(fx-fx̄), pred = $(predf)")
 
         updateBFGS!(B,gx̄-gx,p)
@@ -192,7 +235,9 @@ function bilevel_learn(ds :: Dataset,
         if ρ < η₁               # radius update
             Δ = β₁*Δ
         elseif ρ > η₂
-            Δ = β₂*Δ
+            if norm₂(p) > 0.8*Δ
+                Δ = β₂*Δ
+            end
         end
 
         if predf < 0

@@ -214,10 +214,12 @@ function iterate_bilevel_visualise(st :: BilevelState,
                         elseif par isa AbstractArray{Float64,3}
                             pOp = PatchOp(par,x)
                             par_ = Gray.(pOp(par))
-                            if abs(maximum(par_)-minimum(par)) < sqrt(eps()) 
-                                par_ = (par_ .- minimum(par_)) ./ (maximum(par_))
-                            else
-                                par_ = (par_ .- minimum(par_)) ./ (maximum(par_)-minimum(par_))
+                            for i = 1:3
+                                if abs(maximum(par_[:,:,i])-minimum(par)) < sqrt(eps()) 
+                                    par_[:,:,i] = (par_[:,:,i] .- minimum(par_[:,:,i])) ./ (maximum(par_[:,:,i]))
+                                else
+                                    par_[:,:,i] = (par_[:,:,i] .- minimum(par_[:,:,i])) ./ (maximum(par_[:,:,i])-minimum(par_[:,:,i]))
+                                end
                             end
                             bilevel_visualise(st.vis, (x,par_[:,:,1],par_[:,:,2],par_[:,:,3],))
                         else

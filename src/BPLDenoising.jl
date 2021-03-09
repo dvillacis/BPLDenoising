@@ -194,7 +194,6 @@ function save_results(params, b, b_data, x::Union{Real,AbstractVector{Float64}},
         open(qualityfile,"w") do io
             write(io,"img_num \t orig_ssim \t orig_psnr \t out_ssim \t out_psnr\n")
             M,N,O = size(b)
-            @info size(b)
             for i = 1:O
                 noisy_ssim = assess_ssim(b[:,:,i],b_data[:,:,i])
                 noisy_psnr = assess_psnr(b[:,:,i],b_data[:,:,i])
