@@ -422,4 +422,24 @@ function patch_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_p
     finalise_visualisation(st)
 end
 
+function patch_bilevel_sumregs_learn(image_pair::AbstractArray{T,3},dataset_name;visualise=true, save_prefix=default_save_prefix, kwargs...) where T
+    # Parameters for this experiment
+    params = default_params ⬿ patch_sumregs_bilevel_params ⬿ kwargs
+    params = params ⬿ (save_prefix = "sumregs_optimal_parameter_patch_$(size(params.α₀))" * dataset_name,)
+    # Load dataset
+    b = image_pair[:,:,1]
+    b_noisy = image_pair[:,:,2]
+    b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
+    b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
+    # Launch (background) visualiser
+    st, iterate = initialise_bilevel_visualisation(visualise)
+    # Run algorithm
+    x, u, st = bilevel_learn((b,b_noisy),sumregs_learning_function; xinit=params.α₀,iterate=iterate, params=params)
+    adjust_histogram!(u,LinearStretching())
+    # Save results
+    save_results(params, b, b_noisy, x, u, st)
+    # Exit background visualiser
+    finalise_visualisation(st)
+end
+
 end # Module
