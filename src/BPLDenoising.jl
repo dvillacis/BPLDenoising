@@ -10,12 +10,11 @@ using SparseArrays
 using JLD2
 using FileIO
 using PGFPlots
-pushPGFPlotsOptions("scale=0.8")
+#pushPGFPlotsOptions("scale=0.8")
 using ColorTypes: Gray
 import ColorVectorSpace
 using ImageContrastAdjustment
 using ImageQualityIndexes
-using TestDatasets
 
 using AlgTools.Util
 using AlgTools.LinOps
@@ -31,13 +30,15 @@ include("TRBox.jl")
 #include("TVLearningFunctionOp.jl")
 include("TVLearningFunctionVec.jl")
 include("SumRegsLearningFunction.jl")
+include("Datasets.jl")
 
 using BPLDenoising.BilevelVisualise
+using BPLDenoising.Datasets
 
 
 const default_save_prefix = "output"
 
-function TVDenoise(data,parameter::Real)
+function TVDenoise(data,parameter::Real;visualize=false)
     denoise_params = (
         ρ = 0,
         α = parameter,
@@ -47,17 +48,17 @@ function TVDenoise(data,parameter::Real)
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 2000,
-        verbose_iter = 2001,
+        maxiter = 1000,
+        verbose_iter = 1001,
         save_iterations = false
     )
-    st, iterate = initialise_visualisation(false)
+    st, iterate = initialise_visualisation(visualize)
     out = op_denoise_pdps(data; iterate=iterate, params=denoise_params)
     finalise_visualisation(st)
     return out
 end
 
-function TVDenoise(data,parameter::AbstractArray)
+function TVDenoise(data,parameter::AbstractArray;visualize=false)
     p = PatchOp(parameter,data[:,:,1]) # Adjust parameter size
 	x̄ = zeros(p.size_out)
 	inplace!(x̄,p,parameter)
@@ -70,11 +71,11 @@ function TVDenoise(data,parameter::AbstractArray)
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 2000,
-        verbose_iter = 2001,
+        maxiter = 1000,
+        verbose_iter = 1001,
         save_iterations = false
     )
-    st, iterate = initialise_visualisation(false)
+    st, iterate = initialise_visualisation(visualize)
     out = op_denoise_pdps(data; iterate=iterate, params=denoise_params)
     finalise_visualisation(st)
     return out
@@ -118,7 +119,7 @@ function generate_cost_plot(dataset_name)
     end
 
     @load joinpath(cost_path,dataset_name*"_cost.jld2") parameter_range costs
-    p = Axis(Plots.Linear(parameter_range,costs,mark="none"),style="grid=both", xlabel=L"$\alpha$", ylabel=L"$\|u-\bar{u}\|^2$", title="Scalar Cost")
+    p = Axis(Plots.Linear(parameter_range,costs,mark="none"),style="grid=both", xlabel=L"$\alpha$", ylabel=L"$\|u-\bar{u}\|^2$", title="Scalar Cost", xmode="log", ymode="log")
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot.tex"),p,include_preamble=false)
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot.pdf"),p)
 end
@@ -166,8 +167,8 @@ function generate_2d_cost_plot(dataset_name)
 
     @load joinpath(cost_path,dataset_name*"_cost_2d.jld2") parameter_range_1 parameter_range_2 costs
     c = reshape(costs,length(parameter_range_1),length(parameter_range_2))
-    p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=46.7:0.65:52),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
-    #p = Axis(Plots.Image(costs,(0.005,0.03),(0.005,0.03)),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
+    p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=30.0:0.75:100.0),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost",xmode="log", ymode="log")
+    #p = Axis(Plots.Image(costs,(0.005,0.03),(0.005,0.03)),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost"),levels=30.0:0.75:100.0
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.tex"),p,include_preamble=false)
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.pdf"),p)
 end
@@ -291,7 +292,7 @@ const default_params = (
     verbose_iter = 1,
     maxiter = 20,
     save_results = true,
-    dataset_name = "cameraman128_5",
+    dataset_name = "cameraman_128_5",
     save_iterations = false,
     tol = 1e-5,
     num_samples = 1
@@ -311,7 +312,7 @@ function scalar_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefi
     params = default_params ⬿ bilevel_params ⬿ kwargs
     params = params ⬿ (save_prefix = "tv_optimal_parameter_scalar_" * params.dataset_name,)
     # Load dataset
-    b,b_noisy = TestDatasets.testdataset(params.dataset_name)
+    b,b_noisy = testdataset(params.dataset_name)
     b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
     b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
     # Launch (background) visualiser
@@ -319,6 +320,8 @@ function scalar_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefi
     # Run algorithm
     x, u, st = bilevel_learn((b,b_noisy),tv_op_learning_function; xinit=params.α₀,iterate=iterate, params=params)
     adjust_histogram!(u,LinearStretching())
+    adjust_histogram!(b,LinearStretching())
+    adjust_histogram!(b_noisy,LinearStretching())
     # Save results
     save_results(params, b, b_noisy, x, u, st)
     # Exit background visualiser
@@ -343,7 +346,7 @@ function patch_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefix
     params = default_params ⬿ patch_bilevel_params ⬿ kwargs
     params = params ⬿ (save_prefix = "tv_optimal_parameter_$(size(params.α₀))_" * params.dataset_name,)
     # Load dataset
-    b,b_noisy = TestDatasets.testdataset(params.dataset_name)
+    b,b_noisy = Datasets.testdataset(params.dataset_name)
     b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
     b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
     # Launch (background) visualiser

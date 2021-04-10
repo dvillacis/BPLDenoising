@@ -255,7 +255,7 @@ function bilevel_learn(ds :: Dataset,
         # Give function value if needed
         ################################
         v = verbose() do    
-            x, u[:,:,1], fx, norm₂(gx), Δ # just show the first image on the dataset
+            x, u[:,:,1], fx, norm₂(gx), Δ, dot(x,gx) # just show the first image on the dataset
             #fx,u[:,:,1]
         end
 

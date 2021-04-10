@@ -36,8 +36,8 @@ const denoising_default_params = (
 	σ₀ = 0.99/5,
 	accel = true,
 	save_results = false,
-	maxiter = 1000,
-	verbose_iter = 1001,
+	maxiter = 2000,
+	verbose_iter = 2001,
 	save_iterations = false
 )
 
@@ -119,13 +119,14 @@ function gradient(α::Real, op::LinOp, u::AbstractArray{T,2}, ū::AbstractArray
 	
 	# Adj = [spdiagm(0=>ones(n^2)) α*G';
 	# 		Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
-	Adj = [spdiagm(0=>ones(n^2)) α*G';
-			Act*G+Inact*(prodKuKu-Den)*G Inact+sqrt(eps())*Act]
+	Adj = [spdiagm(0=>ones(n^2)) -G';
+			Act*G+Inact*α*(Den-prodKuKu)*G Inact+sqrt(eps())*Act]
 	
 	Track=[(u[:]-ū[:]);zeros(2*n^2)]
 	mult = Adj\Track
 	p = @view mult[1:n^2]
-	return -p'*(G'*Inact*Den*Gu)
+	grad = sum(scalarprod(G*p,Inact*Den*Gu))
+	return -grad
 end
 
 function gradient_reg(α::Real,op::LinOp,u::AbstractArray{T,2}, ū::AbstractArray{T,2}) where T
@@ -149,8 +150,8 @@ function gradient_reg(α::Real,op::LinOp,u::AbstractArray{T,2}, ū::AbstractArr
 	B = γ*Inact
 	C = (Act*(prodGuGu-Den))
 	p = (I+α*G'*(B-C)*G)\(ū[:]-u[:])
-
-	return p'*(G'*(Act*Den*Gu+γ*Inact*Gu))
+	grad = sum(scalarprod(G*p,Act*Den*Gu+γ*Inact*Gu))
+	return grad
 
 end
 
@@ -235,13 +236,14 @@ function gradient(α::AbstractArray, op::LinOp, pOp::PatchOp, u::AbstractArray{T
 	prodKuKu = prodesc(Gu ./den.^3,Gu)
 	# Adj = [spdiagm(0=>ones(n^2)) spdiagm(0=>α[:])*G';
 	# 		Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
-	Adj = [spdiagm(0=>ones(n^2)) spdiagm(0=>α[:])G';
-			Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
+	Adj = [spdiagm(0=>ones(n^2)) -G';
+			Act*G+Inact*spdiagm(0=>[α[:];α[:]])*(Den-prodKuKu)*G Inact+eps()*Act]
 	
 	Track=[(u[:]-ū[:]);zeros(2*n^2)]
 	mult = Adj\Track
 	p = @view mult[1:n^2]
-	grad = -spdiagm(0=>p[:])*(G'*Inact*Den*Gu)
+	grad = -scalarprod(G*p,Inact*Den*Gu)
+	#grad = -spdiagm(0=>p[:])*(G'*Inact*Den*Gu)
 	grad = reshape(grad,m,n)
 	return calc_adjoint(pOp,grad)
 end

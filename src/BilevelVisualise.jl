@@ -42,6 +42,7 @@ struct BilevelLogEntry <: IterableStruct
     function_value :: Float64
     gradient_value :: Float64
     radius_value :: Float64
+    stopping_criteria :: Float64
 end
 
 struct BilevelState
@@ -199,16 +200,17 @@ function iterate_bilevel_visualise(st :: BilevelState,
                 if verb || iter ≤ 20 || (iter ≤ 200 && mod(iter, 10) == 0)
                     verb_start = secs_ns()
                     tm = verb_start - st.start_time - st.wasted_time
-                    par, x, value, g, Δ = calc_objective()
+                    par, x, value, g, Δ, stopping_criteria = calc_objective()
 
-                    entry = BilevelLogEntry(iter, tm, value, g, Δ)
+                    entry = BilevelLogEntry(iter, tm, value, g, Δ, stopping_criteria)
 
                     # (**) Collect a singly-linked list of log to avoid array resizing
                     # while iterating
                     st = @set st.log=LinkedListEntry(entry, st.log)
                     
                     if verb
-                        @printf("%d/%d x=%f, f=%f, g=%f, Δ=%f\n", iter, params.maxiter, norm₂(par), value, g, Δ)
+                        println(typeof(stopping_criteria))
+                        @printf("%d/%d x=%f, f=%.3f, g=%.4f, Δ=%.3e, stop=%.3e\n", iter, params.maxiter, norm₂(par), value, g, Δ, stopping_criteria)
                         if par isa Union{Real,AbstractVector}
                             bilevel_visualise(st.vis, (x,))
                         elseif par isa AbstractArray{Float64,3}

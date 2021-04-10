@@ -141,13 +141,17 @@ function gradient(α::Real, op::LinOp, u::AbstractArray{T,2}, ū::AbstractArray
 	
 	# Adj = [spdiagm(0=>ones(n^2)) α*G';
 	# 		Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
-	Adj = [spdiagm(0=>ones(n^2)) -α*G';
-			Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
+	Adj = [spdiagm(0=>ones(n^2)) -G';
+			Act*G+Inact*α*(prodKuKu-Den)*G Inact+eps()*Act]
 	
 	Track=[(-u[:]+ū[:]);zeros(2*n^2)]
 	mult = Adj\Track
 	p = @view mult[1:n^2]
-	return p'*(G'*Inact*Den*Gu)
+	Gp = G*p
+	gr = 0
+	ν = (G'*Inact*Den*Gu)
+	println("Stopping criteria: $(α*ν)")
+	return p'*ν
 end
 
 function gradient_reg(α::Real,op::LinOp,u::AbstractArray{T,2}, ū::AbstractArray{T,2}) where T
