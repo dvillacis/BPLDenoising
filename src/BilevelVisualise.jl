@@ -209,8 +209,7 @@ function iterate_bilevel_visualise(st :: BilevelState,
                     st = @set st.log=LinkedListEntry(entry, st.log)
                     
                     if verb
-                        println(typeof(stopping_criteria))
-                        @printf("%d/%d x=%f, f=%.3f, g=%.4f, Δ=%.3e, stop=%.3e\n", iter, params.maxiter, norm₂(par), value, g, Δ, stopping_criteria)
+                        @printf("%d/%d x=%e, f=%.3e, g=%.4e, Δ=%.3e, stop=%.3e\n", iter, params.maxiter, norm₂(par), value, g, Δ, stopping_criteria)
                         if par isa Union{Real,AbstractVector}
                             bilevel_visualise(st.vis, (x,))
                         elseif par isa AbstractArray{Float64,3}

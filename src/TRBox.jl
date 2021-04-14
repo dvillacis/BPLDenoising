@@ -222,12 +222,15 @@ function bilevel_learn(ds :: Dataset,
 
         x̄ = x + p  # test new point
 
+        u,fx,gx = learning_function(x,ds,Δ)
         ū,fx̄,gx̄ = learning_function(x̄,ds,Δ)
+        println("$fx, $fx̄")
         predf = pred(B,p,gx)
         ρ = (fx-fx̄)/predf # ared/pred
         if predf == 0
             @error "Problems with step calculated"
         end
+        println("$(fx-fx̄), $predf, $p")
         #println("ρ=$ρ, ared = $(fx-fx̄), pred = $(predf)")
 
         updateBFGS!(B,gx̄-gx,p)
@@ -244,12 +247,14 @@ function bilevel_learn(ds :: Dataset,
             Δ = β₁*Δ
         end
 
-        if ρ > 1e-3
+        if ρ > 0
             x = x̄
             u = ū
             fx = fx̄
             gx = gx̄
         end
+
+        
 
         ################################
         # Give function value if needed

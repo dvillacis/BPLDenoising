@@ -10,7 +10,9 @@ const dataset_dir = "BPLDenoising/datasets/"
 
 const remotedatasets = [
     "cameraman_128_5",
-    "cameraman_128_10"
+    "cameraman_128_10",
+    "faces_train_128_10",
+    "faces_val_128_10"
 ]
 
 function testdataset(datasetname)

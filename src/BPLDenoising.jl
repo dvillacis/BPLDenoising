@@ -1,6 +1,6 @@
 module BPLDenoising
 
-export generate_scalar_tv_cost, generate_cost_plot
+export generate_scalar_tv_cost, generate_cost_plot, validate_tv_parameter
 export generate_2d_tv_cost, generate_2d_cost_plot
 export scalar_bilevel_tv_learn, patch_bilevel_tv_learn
 export scalar_bilevel_sumregs_learn, patch_bilevel_sumregs_learn
@@ -72,7 +72,7 @@ function TVDenoise(data,parameter::AbstractArray;visualize=false)
         accel = true,
         save_results = false,
         maxiter = 1000,
-        verbose_iter = 1001,
+        verbose_iter = 1000,
         save_iterations = false
     )
     st, iterate = initialise_visualisation(visualize)
@@ -167,7 +167,7 @@ function generate_2d_cost_plot(dataset_name)
 
     @load joinpath(cost_path,dataset_name*"_cost_2d.jld2") parameter_range_1 parameter_range_2 costs
     c = reshape(costs,length(parameter_range_1),length(parameter_range_2))
-    p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=30.0:0.75:100.0),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost",xmode="log", ymode="log")
+    p = Axis(Plots.Contour(c,parameter_range_1,parameter_range_2,style="dashed",levels=150.0:20.0:300.0),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost")
     #p = Axis(Plots.Image(costs,(0.005,0.03),(0.005,0.03)),style="grid=both", xlabel=L"$\alpha_1$", ylabel=L"$\alpha_2$", title="2D Cost"),levels=30.0:0.75:100.0
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.tex"),p,include_preamble=false)
     PGFPlots.save(joinpath(cost_path,dataset_name*"_cost_plot_2d.pdf"),p)
@@ -195,18 +195,23 @@ function save_results(params, b, b_data, x::Union{Real,AbstractVector{Float64}},
         open(qualityfile,"w") do io
             write(io,"img_num \t orig_ssim \t orig_psnr \t out_ssim \t out_psnr\n")
             M,N,O = size(b)
+            mean_ssim=0
+            mean_psnr=0
             for i = 1:O
                 noisy_ssim = assess_ssim(b[:,:,i],b_data[:,:,i])
                 noisy_psnr = assess_psnr(b[:,:,i],b_data[:,:,i])
                 out_ssim = assess_ssim(b[:,:,i],opt_img[:,:,i])
                 out_psnr = assess_psnr(b[:,:,i],opt_img[:,:,i])
                 write(io,"$i\t $noisy_ssim \t $noisy_psnr \t $out_ssim \t $out_psnr\n")
+                mean_ssim += out_ssim
+                mean_psnr += out_psnr
 
                 fn = (t, ext, i) -> "$(joinpath(out_path,params.save_prefix))_$(t)_$(i).$(ext)"
                 FileIO.save(File(format"PNG", fn("true", "png", i)), grayimg(b[:,:,i]))
                 FileIO.save(File(format"PNG", fn("data", "png", i)), grayimg(b_data[:,:,i]))
                 FileIO.save(File(format"PNG", fn("reco", "png", i)), grayimg(opt_img[:,:,i]))
             end
+            write(io,"\t\t\t\t\t $(mean_ssim/O)\t $(mean_psnr/O)\n")
         end
     end
 end
@@ -225,18 +230,23 @@ function save_results(params, b, b_data, x::AbstractArray{T,2}, opt_img, st) whe
         open(qualityfile,"w") do io
             write(io,"img_num \t orig_ssim \t orig_psnr \t out_ssim \t out_psnr\n")
             M,N,O = size(b)
+            mean_ssim=0
+            mean_psnr=0
             for i = 1:O
                 noisy_ssim = assess_ssim(b[:,:,i],b_data[:,:,i])
                 noisy_psnr = assess_psnr(b[:,:,i],b_data[:,:,i])
                 out_ssim = assess_ssim(b[:,:,i],opt_img[:,:,i])
                 out_psnr = assess_psnr(b[:,:,i],opt_img[:,:,i])
                 write(io,"$i\t $noisy_ssim \t $noisy_psnr \t $out_ssim \t $out_psnr\n")
+                mean_ssim += out_ssim
+                mean_psnr += out_psnr
 
                 fn = (t, ext, i) -> "$(joinpath(out_path,params.save_prefix))_$(t)_$(i).$(ext)"
                 FileIO.save(File(format"PNG", fn("true", "png", i)), grayimg(b[:,:,i]))
                 FileIO.save(File(format"PNG", fn("data", "png", i)), grayimg(b_data[:,:,i]))
                 FileIO.save(File(format"PNG", fn("reco", "png", i)), grayimg(opt_img[:,:,i]))
             end
+            write(io,"\t\t\t\t\t $(mean_ssim/O)\t $(mean_psnr/O)\n")
         end
         p = PatchOp(x,b[:,:,1]) # Adjust parameter size
         x̄ = zeros(p.size_out)
@@ -260,18 +270,23 @@ function save_results(params, b, b_data, x::AbstractArray{T,3}, opt_img, st) whe
         open(qualityfile,"w") do io
             write(io,"img_num \t orig_ssim \t orig_psnr \t out_ssim \t out_psnr\n")
             M,N,O = size(b)
+            mean_ssim=0
+            mean_psnr=0
             for i = 1:O
                 noisy_ssim = assess_ssim(b[:,:,i],b_data[:,:,i])
                 noisy_psnr = assess_psnr(b[:,:,i],b_data[:,:,i])
                 out_ssim = assess_ssim(b[:,:,i],opt_img[:,:,i])
                 out_psnr = assess_psnr(b[:,:,i],opt_img[:,:,i])
                 write(io,"$i\t $noisy_ssim \t $noisy_psnr \t $out_ssim \t $out_psnr\n")
+                mean_ssim += out_ssim
+                mean_psnr += mean_psnr
 
                 fn = (t, ext, i) -> "$(joinpath(out_path,params.save_prefix))_$(t)_$(i).$(ext)"
                 FileIO.save(File(format"PNG", fn("true", "png", i)), grayimg(b[:,:,i]))
                 FileIO.save(File(format"PNG", fn("data", "png", i)), grayimg(b_data[:,:,i]))
                 FileIO.save(File(format"PNG", fn("reco", "png", i)), grayimg(opt_img[:,:,i]))
             end
+            write(io,"\t\t\t\t\t $(mean_ssim/O)\t $(mean_psnr/O)\n")
         end
         p = PatchOp(x,b[:,:,1]) # Adjust parameter size
         x̄ = p(x)
@@ -359,6 +374,46 @@ function patch_bilevel_tv_learn(;visualise=true, save_prefix=default_save_prefix
     # Exit background visualiser
     finalise_visualisation(st)
 end
+
+###########################
+# Validate learned tv parameter
+###########################
+function validate_tv_parameter(parameter; kwargs...)
+    params = default_params ⬿ bilevel_params ⬿ kwargs
+    params = params ⬿ (save_prefix = "val_tv_optimal_parameter_scalar_$(size(parameter))_" * params.dataset_name,)
+    println(params)
+    img,noisy = testdataset(params.dataset_name)
+    u = TVDenoise(noisy,parameter)
+    cost = L2CostFunction(u,img)
+    @info "Denoising parameter $(parameter): cost = $(cost)"
+    out_path = joinpath(default_save_prefix,params.dataset_name)
+    if isdir(out_path) == false
+        mkpath(out_path)
+    end
+    qualityfile = joinpath(out_path,params.save_prefix * "_quality.txt")
+    open(qualityfile,"w") do io
+        write(io,"img_num \t orig_ssim \t orig_psnr \t out_ssim \t out_psnr\n")
+        M,N,O = size(img)
+        ssim_mean = 0
+        psnr_mean = 0
+        for i = 1:O
+            noisy_ssim = assess_ssim(img[:,:,i],noisy[:,:,i])
+            noisy_psnr = assess_psnr(img[:,:,i],noisy[:,:,i])
+            out_ssim = assess_ssim(img[:,:,i],u[:,:,i])
+            out_psnr = assess_psnr(img[:,:,i],u[:,:,i])
+            write(io,"$i\t $noisy_ssim \t $noisy_psnr \t $out_ssim \t $out_psnr\n")
+            ssim_mean += out_ssim
+            psnr_mean += out_psnr
+
+            fn = (t, ext, i) -> "$(joinpath(out_path,params.save_prefix))_$(t)_$(i).$(ext)"
+            FileIO.save(File(format"PNG", fn("true", "png", i)), grayimg(img[:,:,i]))
+            FileIO.save(File(format"PNG", fn("data", "png", i)), grayimg(noisy[:,:,i]))
+            FileIO.save(File(format"PNG", fn("reco", "png", i)), grayimg(u[:,:,i]))
+        end
+        write(io,"\t\t\t\t\t $(ssim_mean/O)\t $(psnr_mean/O)\n")
+    end
+end
+
 
 
 ###########################

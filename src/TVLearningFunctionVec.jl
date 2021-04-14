@@ -3,7 +3,7 @@ using VariationalImaging.OpDenoise
 using AlgTools.LinOps
 using AlgTools.Util: @threadsif, dot
 
-export tv_op_learning_function
+export tv_op_learning_function, denoise
 
 Primal = Array{Float64,2}
 Dual = Array{Float64,3}
@@ -11,12 +11,16 @@ Dual = Array{Float64,3}
 ###################
 # Learning function
 ###################
-function tv_op_learning_function(x,data,Δ;Δt=1e-3)
+function tv_op_learning_function(x,data,Δ;Δt=1e-8,kwargs...)
 	ū = data[1]
 	f = data[2]
+	M,N,O = size(data[2])
     op = FwdGradientOp()
-    u = denoise(f,x,op)
-    cost = 0.5*norm₂²(u-ū)
+    u = denoise(f,x,op;kwargs...)
+	cost = 0
+	for i = 1:O
+    	cost += 0.5*norm₂²(u[:,:,i]-ū[:,:,i])
+	end
 	if Δ > Δt
     	grad = gradient(x,op,u,ū)
 	else
@@ -32,21 +36,21 @@ end
 const denoising_default_params = (
 	ρ = 0,
 	# PDPS
-	τ₀ = 5,
+	τ₀ = 6,
 	σ₀ = 0.99/5,
 	accel = true,
 	save_results = false,
-	maxiter = 2000,
-	verbose_iter = 2001,
+	maxiter = 10000,
+	verbose_iter = 10001,
 	save_iterations = false
 )
 
-function denoise(data,x::Real,op::LinOp)
+function denoise(data,x::Real,op::LinOp;kwargs...)
     denoise_scalar_params = (
         α = x,
 		op = op
     )
-	params = denoising_default_params ⬿ denoise_scalar_params
+	params = denoising_default_params ⬿ denoise_scalar_params ⬿ kwargs
     st_opt, iterate_opt = initialise_visualisation(false)
     opt_img = op_denoise_pdps(data; iterate=iterate_opt, params=params)
     finalise_visualisation(st_opt)
