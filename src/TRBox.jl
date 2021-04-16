@@ -208,6 +208,7 @@ function bilevel_learn(ds :: Dataset,
     # Initialise iterates
     ######################
     x, x̄, u, ū, fx, gx, fx̄, gx̄, Δ, B = init_rest(xinit,learning_function,Δ₀,ds)
+    residual = x-x̄
 
     ####################
     # Run the algorithm
@@ -217,20 +218,20 @@ function bilevel_learn(ds :: Dataset,
         
         #println("x=$(norm(x,1)/length(x)), Δ=$Δ, gx=$gx")
 
-        #p = dogleg_box(x,gx,B,Δ) # solve tr subproblem
-        p = dogbox(x,gx,B,Δ)
+        p = dogleg_box(x,gx,B,Δ) # solve tr subproblem
+        #p = dogbox(x,gx,B,Δ)
 
         x̄ = x + p  # test new point
+        #println(minimum(x̄))
 
-        u,fx,gx = learning_function(x,ds,Δ)
         ū,fx̄,gx̄ = learning_function(x̄,ds,Δ)
-        println("$fx, $fx̄")
+        
         predf = pred(B,p,gx)
         ρ = (fx-fx̄)/predf # ared/pred
         if predf == 0
             @error "Problems with step calculated"
         end
-        println("$(fx-fx̄), $predf, $p")
+        #println("$fx, $fx̄, $(fx-fx̄), $predf, $p")
         #println("ρ=$ρ, ared = $(fx-fx̄), pred = $(predf)")
 
         updateBFGS!(B,gx̄-gx,p)
@@ -248,6 +249,7 @@ function bilevel_learn(ds :: Dataset,
         end
 
         if ρ > 0
+            residual = x-x̄
             x = x̄
             u = ū
             fx = fx̄
@@ -260,7 +262,7 @@ function bilevel_learn(ds :: Dataset,
         # Give function value if needed
         ################################
         v = verbose() do    
-            x, u[:,:,1], fx, norm₂(gx), Δ, dot(x,gx) # just show the first image on the dataset
+            x, u[:,:,1], fx, norm₂(gx), Δ, norm₂(residual) # just show the first image on the dataset
             #fx,u[:,:,1]
         end
 

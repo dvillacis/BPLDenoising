@@ -48,8 +48,8 @@ function TVDenoise(data,parameter::Real;visualize=false)
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 1000,
-        verbose_iter = 1001,
+        maxiter = 10000,
+        verbose_iter = 10001,
         save_iterations = false
     )
     st, iterate = initialise_visualisation(visualize)
@@ -71,8 +71,8 @@ function TVDenoise(data,parameter::AbstractArray;visualize=false)
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 1000,
-        verbose_iter = 1000,
+        maxiter = 10000,
+        verbose_iter = 10001,
         save_iterations = false
     )
     st, iterate = initialise_visualisation(visualize)

@@ -11,16 +11,13 @@ Dual = Array{Float64,3}
 ###################
 # Learning function
 ###################
-function tv_op_learning_function(x,data,Δ;Δt=1e-8,kwargs...)
+function tv_op_learning_function(x,data,Δ;Δt=1e-6,kwargs...)
 	ū = data[1]
 	f = data[2]
-	M,N,O = size(data[2])
     op = FwdGradientOp()
     u = denoise(f,x,op;kwargs...)
-	cost = 0
-	for i = 1:O
-    	cost += 0.5*norm₂²(u[:,:,i]-ū[:,:,i])
-	end
+	#println(maximum(u-ū))
+	cost = 0.5*norm₂²(u-ū)
 	if Δ > Δt
     	grad = gradient(x,op,u,ū)
 	else
@@ -36,12 +33,12 @@ end
 const denoising_default_params = (
 	ρ = 0,
 	# PDPS
-	τ₀ = 6,
+	τ₀ = 5,
 	σ₀ = 0.99/5,
 	accel = true,
 	save_results = false,
-	maxiter = 10000,
-	verbose_iter = 10001,
+	maxiter = 5000,
+	verbose_iter = 5001,
 	save_iterations = false
 )
 
@@ -121,10 +118,14 @@ function gradient(α::Real, op::LinOp, u::AbstractArray{T,2}, ū::AbstractArray
 	# prod KuKuᵗ/norm³
 	prodKuKu = prodesc(Gu ./den.^3,Gu)
 	
+	Z1 = spzeros(2*n^2,2*n^2)
+	Z2 = spzeros(n^2,2*n^2)
 	# Adj = [spdiagm(0=>ones(n^2)) α*G';
 	# 		Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
+	# Adj = [spdiagm(0=>ones(n^2)) -G';
+	# 		Act*G+Inact*α*(Den-prodKuKu)*G Inact+sqrt(eps())*Act]+Inact*Den*Gu*G
 	Adj = [spdiagm(0=>ones(n^2)) -G';
-			Act*G+Inact*α*(Den-prodKuKu)*G Inact+sqrt(eps())*Act]
+			Act*G+Inact*α*(Den-prodKuKu)*G Inact+eps()*Act]
 	
 	Track=[(u[:]-ū[:]);zeros(2*n^2)]
 	mult = Adj\Track
@@ -241,7 +242,7 @@ function gradient(α::AbstractArray, op::LinOp, pOp::PatchOp, u::AbstractArray{T
 	# Adj = [spdiagm(0=>ones(n^2)) spdiagm(0=>α[:])*G';
 	# 		Act*G+Inact*(prodKuKu-Den)*G Inact+eps()*Act]
 	Adj = [spdiagm(0=>ones(n^2)) -G';
-			Act*G+Inact*spdiagm(0=>[α[:];α[:]])*(Den-prodKuKu)*G Inact+eps()*Act]
+			Act*G+Inact*spdiagm(0=>[α[:];α[:]])*(Den-prodKuKu)*G Inact+sqrt(eps())*Act]
 	
 	Track=[(u[:]-ū[:]);zeros(2*n^2)]
 	mult = Adj\Track
