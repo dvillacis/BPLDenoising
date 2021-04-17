@@ -49,8 +49,8 @@ function sumregs_denoise(data,x::AbstractVector{Float64},op₁::LinOp,op₂::Lin
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 2000,
-        verbose_iter = 2001,
+        maxiter = 5000,
+        verbose_iter = 5001,
         save_iterations = false
     )
     st_opt, iterate_opt = initialise_visualisation(false)
@@ -74,8 +74,8 @@ function sumregs_denoise(data,x::AbstractArray{T,3},op₁::LinOp,op₂::LinOp,op
         σ₀ = 0.99/5,
         accel = true,
         save_results = false,
-        maxiter = 2000,
-        verbose_iter = 2001,
+        maxiter = 5000,
+        verbose_iter = 5001,
         save_iterations = false
     )
     st_opt, iterate_opt = initialise_visualisation(false)
@@ -315,10 +315,10 @@ function sumregs_gradient(x::AbstractVector{Float64},op₁::LinOp,op₂::LinOp,o
 	## prod KuKuᵗ/norm³
 	prodKuKu₃ = prodesc(Gu₃ ./den₃.^3,Gu₃)
 	
-	Adj = [spdiagm(0=>ones(n^2)) x[1]*G₁' x[2]*G₃' x[3]*G₃';
-			Act₁*G₁+Inact₁*(prodKuKu₁-Den₁)*G₁ Inact₁+eps()*Act₁ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2);
-			Act₂*G₂+Inact₂*(prodKuKu₂-Den₂)*G₂ spzeros(2*n^2,2*n^2) Inact₂+eps()*Act₂ spzeros(2*n^2,2*n^2);
-			Act₃*G₃+Inact₃*(prodKuKu₃-Den₃)*G₃ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2) Inact₃+eps()*Act₃]
+	Adj = [spdiagm(0=>ones(n^2)) -G₁' -G₂' -G₃';
+			Act₁*G₁+Inact₁*x[1]*(Den₁-prodKuKu₁)*G₁ Inact₁+eps()*Act₁ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2);
+			Act₂*G₂+Inact₂*x[2]*(Den₂-prodKuKu₂)*G₂ spzeros(2*n^2,2*n^2) Inact₂+eps()*Act₂ spzeros(2*n^2,2*n^2);
+			Act₃*G₃+Inact₃*x[3]*(Den₃-prodKuKu₃)*G₃ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2) Inact₃+eps()*Act₃]
 	
 	Track=[(u[:]-ū[:]);zeros(6*n^2)]
 	mult = Adj\Track
@@ -385,10 +385,10 @@ function sumregs_gradient(x::AbstractArray{T,3},op₁::LinOp,op₂::LinOp,op₃:
 	x₂ = pOp(x[:,:,2])
 	x₃ = pOp(x[:,:,3])
 
-	Adj = [spdiagm(0=>ones(n^2)) spdiagm(0=>x₁[:])*G₁' spdiagm(0=>x₂[:])*G₃' spdiagm(0=>x₃[:])*G₃';
-			Act₁*G₁+Inact₁*(prodKuKu₁-Den₁)*G₁ Inact₁+eps()*Act₁ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2);
-			Act₂*G₂+Inact₂*(prodKuKu₂-Den₂)*G₂ spzeros(2*n^2,2*n^2) Inact₂+eps()*Act₂ spzeros(2*n^2,2*n^2);
-			Act₃*G₃+Inact₃*(prodKuKu₃-Den₃)*G₃ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2) Inact₃+eps()*Act₃]
+	Adj = [spdiagm(0=>ones(n^2)) -G₁' -G₂' -G₃';
+			Act₁*G₁+Inact₁*spdiagm(0=>[x₁[:];x₁[:]])*(Den₁-prodKuKu₁)*G₁ Inact₁+eps()*Act₁ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2);
+			Act₂*G₂+Inact₂*spdiagm(0=>[x₂[:];x₂[:]])*(Den₂-prodKuKu₂)*G₂ spzeros(2*n^2,2*n^2) Inact₂+eps()*Act₂ spzeros(2*n^2,2*n^2);
+			Act₃*G₃+Inact₃*spdiagm(0=>[x₃[:];x₃[:]])*(Den₃-prodKuKu₃)*G₃ spzeros(2*n^2,2*n^2) spzeros(2*n^2,2*n^2) Inact₃+eps()*Act₃]
 	
 	Track=[(u[:]-ū[:]);zeros(6*n^2)]
 	mult = Adj\Track

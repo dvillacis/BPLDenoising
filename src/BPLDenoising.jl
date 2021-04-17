@@ -3,7 +3,7 @@ module BPLDenoising
 export generate_scalar_tv_cost, generate_cost_plot, validate_tv_parameter
 export generate_2d_tv_cost, generate_2d_cost_plot
 export scalar_bilevel_tv_learn, patch_bilevel_tv_learn
-export scalar_bilevel_sumregs_learn, patch_bilevel_sumregs_learn
+export scalar_bilevel_sumregs_learn, patch_bilevel_sumregs_learn, validate_sumregs_parameter
 
 using Printf
 using SparseArrays
@@ -434,7 +434,7 @@ function scalar_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_
     params = default_params ⬿ sumregs_bilevel_params ⬿ kwargs
     params = params ⬿ (save_prefix = "sumregs_optimal_parameter_scalar_" * params.dataset_name,)
     # Load dataset
-    b,b_noisy = TestDatasets.testdataset(params.dataset_name)
+    b,b_noisy = testdataset(params.dataset_name)
     b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
     b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
     # Launch (background) visualiser
@@ -466,7 +466,7 @@ function patch_bilevel_sumregs_learn(;visualise=true, save_prefix=default_save_p
     params = default_params ⬿ patch_sumregs_bilevel_params ⬿ kwargs
     params = params ⬿ (save_prefix = "sumregs_optimal_parameter_patch_$(size(params.α₀))" * params.dataset_name,)
     # Load dataset
-    b,b_noisy = TestDatasets.testdataset(params.dataset_name)
+    b,b_noisy = testdataset(params.dataset_name)
     b = Float64.(Gray{Float64}.(b))[:,:,1:params.num_samples]
     b_noisy = Float64.(Gray{Float64}.(b_noisy))[:,:,1:params.num_samples]
     # Launch (background) visualiser
@@ -498,6 +498,44 @@ function patch_bilevel_sumregs_learn(image_pair::AbstractArray{T,3},dataset_name
     save_results(params, b, b_noisy, x, u, st)
     # Exit background visualiser
     finalise_visualisation(st)
+end
+
+###########################
+# Validate learned tv parameter
+###########################
+function validate_sumregs_parameter(parameter; kwargs...)
+    params = default_params ⬿ bilevel_params ⬿ kwargs
+    params = params ⬿ (save_prefix = "val_sumregs_optimal_parameter_scalar_$(size(parameter))_" * params.dataset_name,)
+    println(params)
+    img,noisy = testdataset(params.dataset_name)
+    u,cost,grad = sumregs_learning_function(parameter,noisy,0.1)
+    @info "Denoising parameter $(parameter): cost = $(cost)"
+    out_path = joinpath(default_save_prefix,params.dataset_name)
+    if isdir(out_path) == false
+        mkpath(out_path)
+    end
+    qualityfile = joinpath(out_path,params.save_prefix * "_quality.txt")
+    open(qualityfile,"w") do io
+        write(io,"img_num \t orig_ssim \t orig_psnr \t out_ssim \t out_psnr\n")
+        M,N,O = size(img)
+        ssim_mean = 0
+        psnr_mean = 0
+        for i = 1:O
+            noisy_ssim = assess_ssim(img[:,:,i],noisy[:,:,i])
+            noisy_psnr = assess_psnr(img[:,:,i],noisy[:,:,i])
+            out_ssim = assess_ssim(img[:,:,i],u[:,:,i])
+            out_psnr = assess_psnr(img[:,:,i],u[:,:,i])
+            write(io,"$i\t $noisy_ssim \t $noisy_psnr \t $out_ssim \t $out_psnr\n")
+            ssim_mean += out_ssim
+            psnr_mean += out_psnr
+
+            fn = (t, ext, i) -> "$(joinpath(out_path,params.save_prefix))_$(t)_$(i).$(ext)"
+            FileIO.save(File(format"PNG", fn("true", "png", i)), grayimg(img[:,:,i]))
+            FileIO.save(File(format"PNG", fn("data", "png", i)), grayimg(noisy[:,:,i]))
+            FileIO.save(File(format"PNG", fn("reco", "png", i)), grayimg(u[:,:,i]))
+        end
+        write(io,"\t\t\t\t\t $(ssim_mean/O)\t $(psnr_mean/O)\n")
+    end
 end
 
 end # Module
